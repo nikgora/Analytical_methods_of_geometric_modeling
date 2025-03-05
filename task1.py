@@ -238,7 +238,7 @@ plt.title("Завдання 1.5. Кусково-кубічний поліном 
 plt.grid(True)
 plt.show()
 # =====================================================
-# Завдання 1.6. Кубічні сплайни. #TODO
+# Завдання 1.6. Кубічні сплайни.
 # Дані: ті ж вузли X1 = [-4,-3,0,2] та Y1 = [-4,-5,3,-4].
 # Побудуємо два сплайни:
 #   (a) "затиснутий" – з заданими першими похідними (clamped): f'(x0)=f'(xn)=1,
@@ -252,15 +252,84 @@ from scipy.interpolate import CubicSpline
 X1_arr = np.array(X1, dtype=float)
 Y1_arr = np.array(Y1, dtype=float)
 
+
+def compute_cubic_spline(x, y, bc_type='natural'):
+    n = len(x) - 1
+    h = np.diff(x)
+
+    #  Встановлення трикутної системи
+    A = np.zeros((n + 1, n + 1))
+    b = np.zeros(n + 1)
+
+    # Заповнення діагональних записів
+    for i in range(1, n):
+        A[i, i - 1] = h[i - 1]
+        A[i, i] = 2 * (h[i - 1] + h[i])
+        A[i, i + 1] = h[i]
+
+        # Права частина
+        b[i] = 3 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
+
+    if bc_type == 'natural':
+        # (b) Натуральний сплайн – з f''(x0)=f''(xn)=0
+        A[0, 0] = 1.0
+        A[n, n] = 1.0
+        b[0] = 0.0
+        b[n] = 0.0
+    elif bc_type == 'clamped':
+        # (a) Кубічний сплайн із затисненням (clamped) – задаємо граничні умови (f'(x0)=1, f'(xn)=1)
+        A[0, 0] = 2 * h[0]
+        A[0, 1] = h[0]
+        A[n, n - 1] = h[n - 1]
+        A[n, n] = 2 * h[n - 1]
+
+        # Права частина для похідних = 1
+        b[0] = 3 * ((y[1] - y[0]) / h[0] - 1)
+        b[n] = 3 * (1 - (y[n] - y[n - 1]) / h[n - 1])
+
+    # Розв'язання системи
+    c = np.linalg.solve(A, b)
+
+    # Обчислення коефіцієнтів a, b, d
+    a = y[:-1]
+    b = np.zeros(n)
+    d = np.zeros(n)
+
+    for i in range(n):
+        b[i] = (y[i + 1] - y[i]) / h[i] - h[i] * (2 * c[i] + c[i + 1]) / 3
+        d[i] = (c[i + 1] - c[i]) / (3 * h[i])
+
+    return a, b, c[:-1], d, x[:-1]
+
+
+def evaluate_spline(x_eval, x_knots, coeffs):
+    a, b, c, d, xi = coeffs
+    y_eval = np.zeros_like(x_eval)
+
+    for i in range(len(x_eval)):
+        # Шукаємо відповідний інтервал
+        idx = np.searchsorted(x_knots, x_eval[i]) - 1
+        if idx < 0:
+            idx = 0
+        if idx >= len(xi):
+            idx = len(xi) - 1
+
+        # Обчислити значення сплайна
+        dx = x_eval[i] - xi[idx]
+        y_eval[i] = a[idx] + b[idx] * dx + c[idx] * dx ** 2 + d[idx] * dx ** 3
+
+    return y_eval
+
+
 # (a) Кубічний сплайн із затисненням (clamped) – задаємо граничні умови (f'(x0)=1, f'(xn)=1)
-cs_clamped = CubicSpline(X1_arr, Y1_arr, bc_type=((1, 1.0), (1, 1.0)))
+coeffs_clamped = compute_cubic_spline(X1_arr, Y1_arr, bc_type='clamped')
 
 # (b) Натуральний сплайн – з f''(x0)=f''(xn)=0
-cs_natural = CubicSpline(X1_arr, Y1_arr, bc_type='natural')
+coeffs_natural = compute_cubic_spline(X1_arr, Y1_arr, bc_type='natural')
 
 x_vals6 = np.linspace(min(X1) - 1, max(X1) + 1, 400)
-y_clamped = cs_clamped(x_vals6)
-y_natural = cs_natural(x_vals6)
+y_clamped = evaluate_spline(x_vals6, X1_arr, coeffs_clamped)
+y_natural = evaluate_spline(x_vals6, X1_arr, coeffs_natural)
 
 plt.figure(figsize=(6, 4))
 plt.plot(x_vals6, y_clamped, 'b-', label='Кубічний сплайн (clamped)')
@@ -290,13 +359,14 @@ t_arr = np.array(t_vals, dtype=float)
 x_points = np.array([p[0] for p in points_closed], dtype=float)
 y_points = np.array([p[1] for p in points_closed], dtype=float)
 
-# Побудова параметричних сплайнів із періодичними граничними умовами
-csx = CubicSpline(t_arr, x_points, bc_type='periodic')
-csy = CubicSpline(t_arr, y_points, bc_type='periodic')
+# Використання власної функції для побудови параметричних сплайнів
+coeffs_x = compute_cubic_spline(t_arr, x_points, bc_type='clamped')
+coeffs_y = compute_cubic_spline(t_arr, y_points, bc_type='clamped')
 
+# Обчислюємо точки кривої
 t_dense = np.linspace(t_arr[0], t_arr[-1], 400)
-x_dense = csx(t_dense)
-y_dense = csy(t_dense)
+x_dense = evaluate_spline(t_dense, t_arr, coeffs_x)
+y_dense = evaluate_spline(t_dense, t_arr, coeffs_y)
 
 plt.figure(figsize=(6, 6))
 plt.plot(x_dense, y_dense, 'b-', label='Параметричний сплайн')
