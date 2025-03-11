@@ -286,7 +286,21 @@ def compute_cubic_spline(x, y, bc_type='natural'):
         # Права частина для похідних = 1
         b[0] = 3 * ((y[1] - y[0]) / h[0] - 1)
         b[n] = 3 * (1 - (y[n] - y[n - 1]) / h[n - 1])
+    elif bc_type == 'closed':
+        # (c) Замкнений сплайн - періодичні граничні умови
+        # Для періодичного сплайну: s0 = sn, s'0 = s'n, s''0 = s''n
 
+        # Перший рядок: s0 = sn
+        A[0, 0] = 1
+        A[0, n] = -1
+        b[0] = 0
+
+        # Останній рядок: зв'язок між першою та останньою ділянками
+        A[-1, 0] = -2 * h[1]
+        A[-1, 1] = -h[1]
+        A[-1, -1 - 1] = -h[-1]
+        A[-1, -1] = -2 * h[-1]
+        b[-1] = 3 * (((y[-1] - y[-1 - 1]) / h[-1]) - ((y[1] - y[0]) / h[1]))
     # Розв'язання системи
     c = np.linalg.solve(A, b)
 
@@ -360,8 +374,8 @@ x_points = np.array([p[0] for p in points_closed], dtype=float)
 y_points = np.array([p[1] for p in points_closed], dtype=float)
 
 # Використання власної функції для побудови параметричних сплайнів
-coeffs_x = compute_cubic_spline(t_arr, x_points, bc_type='clamped')
-coeffs_y = compute_cubic_spline(t_arr, y_points, bc_type='clamped')
+coeffs_x = compute_cubic_spline(t_arr, x_points, bc_type='closed')
+coeffs_y = compute_cubic_spline(t_arr, y_points, bc_type='closed')
 
 # Обчислюємо точки кривої
 t_dense = np.linspace(t_arr[0], t_arr[-1], 400)
