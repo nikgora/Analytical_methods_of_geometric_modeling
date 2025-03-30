@@ -162,12 +162,12 @@ y_expr = expr_func(x_vals)
 y_heaviside = f_heaviside_func(x_vals)
 
 plt.figure(figsize=(7, 5))
-# 1) Piecewise (фіолетовий)
-plt.plot(x_vals, y_piece, 'm-', label='Piecewise', linewidth=2)
-# 2) Формульне представлення (синій)
-plt.plot(x_vals, y_expr, color='blue', label='Формула Q, Ql, Π', linewidth=4)
 # 3) Формула Гевісайда (зелений)
 plt.plot(x_vals, y_heaviside, color='green', label='Heaviside', linewidth=6)
+# 2) Формульне представлення (синій)
+plt.plot(x_vals, y_expr, color='blue', label='Формула Q, Ql, Π', linewidth=4)
+# 1) Piecewise (фіолетовий)
+plt.plot(x_vals, y_piece, 'm-', label='Piecewise', linewidth=2)
 
 plt.xlabel("x")
 plt.ylabel("f(x)")
@@ -241,25 +241,19 @@ plt.show()
 #   (a) кубічний сплайн із затисненням (clamped): f'(x0)=f'(xn)=1,
 #   (b) натуральний сплайн: f''(x0)=f''(xn)=0.
 # Використовуємо scipy.interpolate.CubicSpline [&#8203;:contentReference[oaicite:3]{index=3}].
+# TODO єдиний формульний вираз
 # =====================================================
 print("Завдання 2.4. Кубічні сплайни")
 
+import numpy as np
+import matplotlib.pyplot as plt
+import sympy as sp
 
+
+# =====================================================
+# Функція обчислення коефіцієнтів кубічного сплайну
+# =====================================================
 def compute_cubic_spline(x, y, bc_type='natural'):
-    """
-    Обчислює коефіцієнти кубічного сплайну.
-
-    Параметри:
-      x, y    – масиви опорних точок.
-      bc_type – тип крайових умов:
-                 'natural' – натуральний сплайн (f''(x₀)=f''(xₙ)=0),
-                 'clamped' – сплайн із затисненням (f'(x₀)=f'(xₙ)=1).
-
-    Повертає кортеж:
-      (a_coef, b_coef, c_coef, d_coef, knots)
-    де для i-го інтервалу [xᵢ, xᵢ₊₁]:
-      Sᵢ(x) = a_coef[i] + b_coef[i]*(x - xᵢ) + c_coef[i]*(x - xᵢ)² + d_coef[i]*(x - xᵢ)³.
-    """
     n = len(x) - 1
     h = np.diff(x)
     A = np.zeros((n + 1, n + 1))
@@ -274,13 +268,12 @@ def compute_cubic_spline(x, y, bc_type='natural'):
 
     # Задаємо крайові умови
     if bc_type == 'natural':
-        # Натуральний сплайн: f''(x₀) = f''(xₙ) = 0
         A[0, 0] = 1.0
         A[n, n] = 1.0
         b_vec[0] = 0.0
         b_vec[n] = 0.0
     elif bc_type == 'clamped':
-        # Сплайн із затисненням: f'(x₀) = f'(xₙ) = 1
+        # Для clamped сплайну f'(x₀)=f'(xₙ)=1
         A[0, 0] = 2 * h[0]
         A[0, 1] = h[0]
         A[n, n - 1] = h[n - 1]
@@ -301,19 +294,13 @@ def compute_cubic_spline(x, y, bc_type='natural'):
         b_coef[i] = (y[i + 1] - y[i]) / h[i] - h[i] * (2 * c[i] + c[i + 1]) / 3
         d_coef[i] = (c[i + 1] - c[i]) / (3 * h[i])
 
-    # Повертаємо повний список опорних точок (knots)
     return a_coef, b_coef, c[:-1], d_coef, x
 
 
-# ===============================
-# Функція для обчислення значень сплайну (за отриманими коефіцієнтами)
-# ===============================
+# =====================================================
+# Функція обчислення значень сплайну для побудови графіку
+# =====================================================
 def evaluate_spline(x_eval, coeffs):
-    """
-    Обчислює значення кубічного сплайну в точках x_eval.
-
-    coeffs – кортеж (a_coef, b_coef, c_coef, d_coef, knots).
-    """
     a_coef, b_coef, c_coef, d_coef, knots = coeffs
     y_eval = np.zeros_like(x_eval)
     n = len(a_coef)
@@ -329,219 +316,244 @@ def evaluate_spline(x_eval, coeffs):
     return y_eval
 
 
-# ===============================
-# Функція для генерації єдиного формульного виразу (piecewise) сплайну
-# ===============================
-def generate_spline_formula(coeffs):
-    """
-    Генерує текстове представлення сплайну для кожного інтервалу.
+# =====================================================
+# Основна частина програми
+# =====================================================
 
-    Для кожного інтервалу [xᵢ, xᵢ₊₁] виводиться вираз:
-      S(x) = aᵢ + bᵢ*(x - xᵢ) + cᵢ*(x - xᵢ)² + dᵢ*(x - xᵢ)³.
-    """
-    a_coef, b_coef, c_coef, d_coef, knots = coeffs
-    n = len(a_coef)
-    formulas = []
-    for i in range(n):
-        formulas.append(
-            f"For x in [{knots[i]}, {knots[i + 1]}]:\n"
-            f"  S(x) = {a_coef[i]:.6g} + {b_coef[i]:.6g}*(x - {knots[i]}) + {c_coef[i]:.6g}*(x - {knots[i]})^2 + {d_coef[i]:.6g}*(x - {knots[i]})^3"
-        )
-    return "\n\n".join(formulas)
-
-
-# ===============================
-# Основна частина: Обчислення та виведення результатів
-# ===============================
-
-# Задане множину опорних точок
+# Задана множина опорних точок
 X_arr = np.array([-4, -3, 0, 2], dtype=float)
 Y_arr = np.array([-4, -5, 3, -4], dtype=float)
 
-# 1. Кубічний сплайн із затисненням (clamped): f'(x₀)=f'(xₙ)=1
-coeffs_clamped = compute_cubic_spline(X_arr, Y_arr, bc_type='clamped')
-formula_clamped = generate_spline_formula(coeffs_clamped)
-print("=== Кубічний сплайн з одиничними першими похідними (clamped) ===")
-print(formula_clamped)
-print("\n----------------------------------------------------\n")
-
-# 2. Натуральний кубічний сплайн (natural): f''(x₀)=f''(xₙ)=0
+# Обчислення коефіцієнтів для сплайнів з двома крайовими умовами
 coeffs_natural = compute_cubic_spline(X_arr, Y_arr, bc_type='natural')
-formula_natural = generate_spline_formula(coeffs_natural)
-print("=== Кубічний сплайн з нульовими другими похідними (natural) ===")
-print(formula_natural)
-print("\n----------------------------------------------------\n")
+coeffs_clamped = compute_cubic_spline(X_arr, Y_arr, bc_type='clamped')
 
-# Для наочності побудуємо графіки обох сплайнів
+# Виведення символьних формул
+print("Символьний єдиний формульний вираз для кубічного сплайну (natural):")
+sp.pprint(sym_expr_natural)
+print("\nСимвольний єдиний формульний вираз для кубічного сплайну (clamped):")
+sp.pprint(sym_expr_clamped)
+
+# Побудова графіка з обома сплайнами
 x_vals = np.linspace(X_arr[0] - 1, X_arr[-1] + 1, 400)
-y_clamped = evaluate_spline(x_vals, coeffs_clamped)
 y_natural = evaluate_spline(x_vals, coeffs_natural)
+y_clamped = evaluate_spline(x_vals, coeffs_clamped)
 
 plt.figure(figsize=(8, 5))
-plt.plot(x_vals, y_clamped, 'b-', label="Clamped (f'(x₀)=f'(xₙ)=1)")
-plt.plot(x_vals, y_natural, 'g--', label="Natural (f''(x₀)=f''(xₙ)=0)")
+plt.plot(x_vals, y_natural, 'g--', label="Natural Spline")
+plt.plot(x_vals, y_clamped, 'b-', label="Clamped Spline")
 plt.plot(X_arr, Y_arr, 'ro', markersize=8, label="Опорні точки")
 plt.xlabel("x")
 plt.ylabel("S(x)")
-plt.title("Кубічні сплайни: clamped та natural")
+plt.title("Кубічні сплайни: natural та clamped")
 plt.legend()
 plt.grid(True)
 plt.show()
+
 
 # =====================================================
 # Завдання 2.5. Кусково-кубічний поліном Ерміта
 # Дані: ті ж вузли: X = [-1, 0, 1, 2], Y = [2, 1, 2, 5]
 #  похідні f'(xi) = [-1,-1,3,3].
-# Будуємо кожну кубічну ланку за заданою формулою [&#8203;:contentReference[oaicite:4]{index=4}].
 # =====================================================
-print("Завдання 2.5. Кусково-кубічний поліном Ерміта")
+
+# Функція для обчислення кубічного сегменту Ерміта на [x_{i-1}, x_i]
+def hermite_segment(x_sym, x0, x1, y0, y1, g0, g1):
+    h = x1 - x0
+    t = (x_sym - x0) / h
+    # Стандартна формула кубічного Ерміта:
+    return (2 * t ** 3 - 3 * t ** 2 + 1) * y0 + (t ** 3 - 2 * t ** 2 + t) * h * g0 + (-2 * t ** 3 + 3 * t ** 2) * y1 + (t ** 3 - t ** 2) * h * g1
 
 
+# Функція для генерації уніфікованого символьного виразу для кусково-кубічного полінома Ерміта
+# згідно з формулою (7)–(8)
+def generate_symbolic_unified_hermite_formula(x_sym, xp, yp, dyp):
+    # Кількість сегментів = len(xp) - 1
+    n = len(xp) - 1
+
+    # Обчислюємо p1(x) – першу поліноміальну ланку на [x0, x1]
+    p1_expr = hermite_segment(x_sym, xp[0], xp[1], yp[0], yp[1], dyp[0], dyp[1])
+
+    # Обчислюємо pn(x) – останню поліноміальну ланку на [x_{n-1}, x_n]
+    pn_expr = hermite_segment(x_sym, xp[n - 1], xp[n], yp[n - 1], yp[n], dyp[n - 1], dyp[n])
+
+    # Обчислюємо суму для внутрішніх вузлів (i = 1,..., n-1)
+    interior_sum = 0
+    # Для i від 1 до n-1:
+    # (зауважимо, що якщо вузлів 4, то n = 3, а i пробігає 1, 2 – внутрішні вузли)
+    for i in range(1, n):
+        h_left = xp[i] - xp[i - 1]
+        h_right = xp[i + 1] - xp[i]
+        # Формуємо окремі частини для формули (8)
+        term1 = (yp[i + 1] - yp[i]) / (h_right ** 2)
+        term2 = (yp[i] - yp[i - 1]) / (h_left ** 2)
+        term3 = (dyp[i + 1] + 2 * dyp[i]) / (h_right)
+        term4 = (dyp[i - 1] + 2 * dyp[i]) / (h_left)
+        term5 = (dyp[i] + dyp[i + 1]) / (h_right ** 2)
+        term6 = 2 * (yp[i + 1] - yp[i]) / (h_right ** 3)
+        term7 = 2 * (yp[i] - yp[i - 1]) / (h_left ** 3)
+        term8 = (dyp[i - 1] + dyp[i]) / (h_left ** 2)
+        # Формула (8)
+        P1_i = sp.Rational(1, 2) * (3 * (term1 + term2) - (term3 + term4) + (term5 - term6 + term7 - term8) * (x_sym - xp[i]))
+        # Додаємо внесок для вузла xi: P1_i(x)*(x - xi)*|x - xi|
+        interior_sum += P1_i * (x_sym - xp[i]) * sp.Abs(x_sym - xp[i])
+
+    # Остаточний уніфікований вираз згідно з формулою (7)
+    unified_expr = sp.Rational(1, 2) * (p1_expr + pn_expr) + interior_sum
+    unified_expr = sp.simplify(unified_expr)
+    return unified_expr
+
+
+# ===============================
+# Основна частина
+# ===============================
+print("Завдання 2.5. Кусково-кубічний поліном Ерміта (уніфікований запис)")
+
+# Вхідні дані
+xp = [-1, 0, 1, 2]  # вузли
+yp = [2, 1, 2, 5]  # значення функції
+dyp = [-1, -1, 3, 3]  # значення похідних
+
+
+# Отримуємо Piecewise-функцію з лінійним продовженням (опціонально, як базовий приклад)
 def universal_hermite_linear_extension(x_sym, xp, yp, dyp):
-    """
-    Повертає символьну Piecewise-функцію, що представляє
-    кусково-кубічний поліном Ерміта на [xp[0], xp[-1]]
-    з лінійним продовженням поза цим інтервалом.
-
-    Аргументи:
-      x_sym - символьна змінна (наприклад, sp.Symbol('x'))
-      xp    - список вузлів (x-координат)
-      yp    - список значень функції в цих вузлах
-      dyp   - список значень похідних у цих вузлах
-    """
-
-    # Допоміжна функція, що повертає кубічний поліном Ерміта на [x0, x1].
-    def hermite_segment(x_sym, x0, x1, y0, y1, dy0, dy1):
+    def hermite_seg(x_sym, x0, x1, y0, y1, dy0, dy1):
         h = x1 - x0
         t = (x_sym - x0) / h
         h00 = 2 * t ** 3 - 3 * t ** 2 + 1
         h10 = t ** 3 - 2 * t ** 2 + t
         h01 = -2 * t ** 3 + 3 * t ** 2
         h11 = t ** 3 - t ** 2
-        return (h00 * y0 +
-                h10 * h * dy0 +
-                h01 * y1 +
-                h11 * h * dy1)
+        return h00 * y0 + h10 * h * dy0 + h01 * y1 + h11 * h * dy1
 
     n = len(xp)
     segments = []
-    # Генеруємо кубічні поліноми Ерміта на кожному інтервалі
+    # Будуємо сегменти для кожного інтервалу
     for i in range(n - 1):
-        seg_expr = hermite_segment(x_sym, xp[i], xp[i + 1],
-                                   yp[i], yp[i + 1],
-                                   dyp[i], dyp[i + 1])
+        seg_expr = hermite_seg(x_sym, xp[i], xp[i + 1], yp[i], yp[i + 1], dyp[i], dyp[i + 1])
         cond = (x_sym >= xp[i]) & (x_sym <= xp[i + 1])
         segments.append((sp.simplify(seg_expr), cond))
-
-    # ЛІНІЙНЕ продовження вліво:
-    # y = y_p[0] + dyp[0]*(x - x_p[0])
+    # Лінійне продовження вліво
     left_line = yp[0] + dyp[0] * (x_sym - xp[0])
     segments.insert(0, (left_line, x_sym < xp[0]))
-
-    # ЛІНІЙНЕ продовження вправо:
-    # y = y_p[-1] + dyp[-1]*(x - x_p[-1])
+    # Лінійне продовження вправо
     right_line = yp[-1] + dyp[-1] * (x_sym - xp[-1])
     segments.append((right_line, x_sym > xp[-1]))
 
-    # Формуємо Piecewise-функцію
-    piecewise_func = sp.Piecewise(*segments)
-    return sp.simplify(piecewise_func)
+    return sp.simplify(sp.Piecewise(*segments))
 
 
-# Приклад використання
+H_piecewise = universal_hermite_linear_extension(x, xp, yp, dyp)
+print("\nPiecewise‑функція з лінійним продовженням:")
+sp.pprint(H_piecewise)
 
-# Вхідні дані: списки вузлів, значень та похідних (цей приклад можна змінити)
-xp = [-1, 0, 1, 2]
-yp = [2, 1, 2, 5]
-dyp = [-1, -1, 3, 3]
+# Генеруємо єдиний символьний формульний вираз за формулами (7)–(8)
+unified_H_expr = generate_symbolic_unified_hermite_formula(x, xp, yp, dyp)
+print("\nЄдиний символьний формульний вираз для полінома Ерміта:")
+sp.pretty_print(unified_H_expr)
 
-H_lin_ext = universal_hermite_linear_extension(x, xp, yp, dyp)
-
-print("Piecewise-функція з лінійним продовженням:")
-sp.pprint(H_lin_ext)
-
-# Перетворюємо на звичайну Python-функцію
-H_func = sp.lambdify(x, H_lin_ext, 'numpy')
+# Перетворюємо символьний вираз на функцію для побудови графіку
+H_func_unified = sp.lambdify(x, unified_H_expr, 'numpy')
 
 # Точки для графіка
 xx = np.linspace(xp[0] - 1, xp[-1] + 1, 400)
-yy = H_func(xx)
+yy_unified = H_func_unified(xx)
 
 plt.figure(figsize=(8, 6))
-plt.plot(xx, yy, 'b', label="Hermite spline з лінійним продовженням")
+plt.plot(xx, yy_unified, 'b', label="Unified Hermite polynomial")
 plt.scatter(xp, yp, color='r', zorder=5, label="Вузли")
 plt.xlabel("x")
 plt.ylabel("H(x)")
-plt.title("Кусково-кубічний поліном Ерміта з лінійним продовженням")
+plt.title("Кусково-кубічний поліном Ерміта (уніфікований запис)")
 plt.grid(True)
 plt.legend()
 plt.show()
 # =====================================================
 # Завдання 2.6.1. Формульне представлення параметричних рівнянь ламаної
-# Дані: вершини в площині: [(0, -1), (0, -3), (2, 0), (0, 3), (0, 1), (1, -2), (-1, -2), (-1, 0)]
+# Дані: вершини в площині: [(-1, 0), (-3, 0), (0, 2), (3, 0), (1, 0), (1, -2), (-1, -2), (-1, 0)]
 # Побудувати символьні параметричні рівняння кожного сегменту (лінійна інтерполяція)
 # та зобразити графік ламаної.
 # =====================================================
-print("Завдання 2.6.1. Параметричні рівняння ламаної")
 import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
 
-# Символьна змінна параметру
+print("Завдання 2.6.1. Параметрична ламана")
+# Визначення символьної змінної параметра t
 t = sp.symbols('t', real=True)
 
-# Задано вершини ламаної
-points_2_6_1 = [(-1, 0), (-3, 0), (0, 2), (3, 0), (1, 0), (1, -2), (-1, -2), (-1, 0)]
-# Призначаємо параметричні значення для кожної точки: t = 0, 1, 2, ..., 6
-t_vals = list(range(len(points_2_6_1)))
 
-# Обчислюємо параметричні рівняння для кожного сегменту
-segments_2_6_1 = []
-for i in range(len(points_2_6_1) - 1):
-    t1, t2 = t_vals[i], t_vals[i + 1]
-    x1, y1 = points_2_6_1[i]
-    x2, y2 = points_2_6_1[i + 1]
-    # Лінійна інтерполяція: x(t) та y(t)
-    x_seg = sp.simplify(x1 + (x2 - x1) / (t2 - t1) * (t - t1))
-    y_seg = sp.simplify(y1 + (y2 - y1) / (t2 - t1) * (t - t1))
-    segments_2_6_1.append(((t >= t1) & (t < t2), (x_seg, y_seg)))
+# Допоміжна функція P(t, a, w)
+def P_func(t_sym, a, w):
+    return (1 / (2 * w)) * (w + sp.Abs(t_sym - a) - sp.Abs(t_sym - a - w))
 
-print("Параметричні рівняння ламаної (2.6.1):")
-for idx, (cond, (x_eq, y_eq)) in enumerate(segments_2_6_1, start=1):
-    print(f"\nСегмент {idx}:")
-    print("  x(t) =", sp.pretty(x_eq))
-    print("  y(t) =", sp.pretty(y_eq))
-    print("  для t, де", sp.pretty(cond))
 
-# =====================================================
-# Побудова графіка для завдання 2.6.1
-# Обчислюємо дискретні значення для кожного сегменту
-x_points = []
-y_points = []
+# Задано вершини ламаної (радіус-вектори) у площині
+# (x, y)
+points = [(-1, 0), (-3, 0), (0, 2), (3, 0), (1, 0), (1, -2), (-1, -2), (-1, 0)]
 
-for i in range(len(points_2_6_1) - 1):
-    t1, t2 = t_vals[i], t_vals[i + 1]
-    # Створюємо масив значень параметру для поточного сегмента
-    t_seg = np.linspace(t1, t2, 100)
-    x1, y1 = points_2_6_1[i]
-    x2, y2 = points_2_6_1[i + 1]
-    # Лінійна інтерполяція: обчислення x та y для даного t_seg
-    x_seg = x1 + (x2 - x1) / (t2 - t1) * (t_seg - t1)
-    y_seg = y1 + (y2 - y1) / (t2 - t1) * (t_seg - t1)
-    x_points.extend(x_seg)
-    y_points.extend(y_seg)
+# Призначаємо вузлам монотонно зростаючі значення параметра:
+# t0, t1, ..., t7 (тут беремо t_i = i)
+t_vals = list(range(len(points)))  # [0, 1, 2, ..., 7]
 
+# Побудова єдиних символьних формул для x(t) та y(t)
+# x(t) = x0 + ∑(x_i - x_{i-1}) * P(t, t_{i-1}, t_i-t_{i-1})
+# y(t) = y0 + ∑(y_i - y_{i-1}) * P(t, t_{i-1}, t_i-t_{i-1})
+
+# Для x(t)
+x0 = points[0][0]
+unified_x_expr = sp.Float(x0)
+for i in range(1, len(points)):
+    delta_x = points[i][0] - points[i - 1][0]
+    a = t_vals[i - 1]
+    w_val = t_vals[i] - t_vals[i - 1]  # Тут w_val = 1, але формула загальна
+    unified_x_expr += delta_x * P_func(t, a, w_val)
+
+# Для y(t)
+y0 = points[0][1]
+unified_y_expr = sp.Float(y0)
+for i in range(1, len(points)):
+    delta_y = points[i][1] - points[i - 1][1]
+    a = t_vals[i - 1]
+    w_val = t_vals[i] - t_vals[i - 1]
+    unified_y_expr += delta_y * P_func(t, a, w_val)
+
+# Спрощуємо вирази
+unified_x_expr = sp.simplify(unified_x_expr)
+unified_y_expr = sp.simplify(unified_y_expr)
+
+print("Єдина символьна формула для x(t):")
+sp.pretty_print(unified_x_expr)
+print("\nЄдина символьна формула для y(t):")
+sp.pretty_print(unified_y_expr)
+
+# Перетворюємо символьні вирази у функції для чисельного обчислення
+x_func = sp.lambdify(t, unified_x_expr, 'numpy')
+y_func = sp.lambdify(t, unified_y_expr, 'numpy')
+
+# Обираємо сітку значень параметра t
+t_min = t_vals[0]
+t_max = t_vals[-1]
+t_array = np.linspace(t_min, t_max, 400)
+
+# Обчислюємо координати x та y
+x_vals = x_func(t_array)
+y_vals = y_func(t_array)
+
+# Побудова графіка ламаної
 plt.figure(figsize=(6, 4))
-plt.plot(x_points, y_points, 'b-', label='Параметрична ламана')
-# Позначимо задані вершини
-xp, yp = zip(*points_2_6_1)
-plt.plot(xp, yp, 'ro', markersize=8, label='Вузли')
+plt.plot(x_vals, y_vals, 'b-', label='Уніфікована ламана')
+# Позначаємо задані вершини
+vertices_x = [pt[0] for pt in points]
+vertices_y = [pt[1] for pt in points]
+plt.plot(vertices_x, vertices_y, 'ro', markersize=8, label='Вузли')
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("Завдання 2.6.1. Графік параметричної ламаної")
+plt.title("Параметрична ламана (уніфікований запис)")
 plt.legend()
 plt.grid(True)
 plt.show()
+
 # =====================================================
 # Завдання 2.6.2. Параметричне рівняння просторової ламаної, що формує контур тетраедра
 # Дані: координати вершин тетраедра: A, B, C, D.
@@ -549,72 +561,95 @@ plt.show()
 # (відрізок BC використовується двічі в різних напрямках).
 # =====================================================
 print("Завдання 2.6.2. Параметричне рівняння просторової ламаної")
-import numpy as np
-import matplotlib.pyplot as plt
-import sympy as sp
+# Визначення символьної змінної параметра t
+t = sp.symbols('t', real=True)
 
-# Задаємо координати вершин тетраедра
+
+# Допоміжна функція P(t, a, w)
+def P_func(t_sym, a, w):
+    return (1 / (2 * w)) * (w + sp.Abs(t_sym - a) - sp.Abs(t_sym - a - w))
+
+
+# Задано вершини (радіус-вектори) просторової ламаної
+# Приклад: вершини тетраедра, задані у певній послідовності
 A = (7, 2, 4)
 B = (7, -1, -2)
 C = (3, 3, 1)
 D = (-4, 2, 1)
-
-# Формуємо послідовність вершин згідно з умовою: A, B, C, A, D, C, B, D
+# Послідовність вершин (можна задати довільну послідовність)
 points = [A, B, C, A, D, C, B, D]
+vertex_labels = ['A', 'B', 'C', 'A', 'D', 'C', 'B', 'D']
+# Призначаємо вузлам параметричні значення t0, t1, ..., t7 (монотонно зростають, наприклад, 0, 1, 2, ...)
+t_vals = list(range(len(points)))  # [0, 1, 2, ..., 7]
 
-# Призначаємо параметричні значення для кожної точки: t = 0, 1, ..., 7
-t_vals = list(range(len(points)))
+# Обчислення єдиного символьного виразу для кожної координати:
+# x(t) = x0 + Σ (x_i - x_{i-1})*P(t, t_{i-1}, t_i-t_{i-1})
+# аналогічно для y(t) та z(t)
+x0 = points[0][0]
+y0 = points[0][1]
+z0 = points[0][2]
 
-# Побудова символічного представлення кожного сегменту ламаної
-segments_symbolic = []  # список символічних виразів для кожного сегменту
-for i in range(len(points) - 1):
-    t1, t2 = t_vals[i], t_vals[i + 1]
-    x1, y1, z1 = points[i]
-    x2, y2, z2 = points[i + 1]
-    # Лінійна інтерполяція для сегменту (символьне представлення)
-    x_seg_sym = sp.simplify(x1 + (x2 - x1) / (t2 - t1) * (t - t1))
-    y_seg_sym = sp.simplify(y1 + (y2 - y1) / (t2 - t1) * (t - t1))
-    z_seg_sym = sp.simplify(z1 + (z2 - z1) / (t2 - t1) * (t - t1))
-    segments_symbolic.append((x_seg_sym, y_seg_sym, z_seg_sym))
+unified_x_expr = sp.Float(x0)
+unified_y_expr = sp.Float(y0)
+unified_z_expr = sp.Float(z0)
 
-print("Символічні параметричні рівняння для кожного сегменту ламаної:")
-for idx, (x_eq, y_eq, z_eq) in enumerate(segments_symbolic, start=1):
-    print(f"\nСегмент {idx}:")
-    print("  x(t) =", sp.pretty(x_eq))
-    print("  y(t) =", sp.pretty(y_eq))
-    print("  z(t) =", sp.pretty(z_eq))
+for i in range(1, len(points)):
+    a_val = t_vals[i - 1]
+    w_val = t_vals[i] - t_vals[i - 1]  # тут за замовчуванням w_val = 1, але формула універсальна
+    delta_x = points[i][0] - points[i - 1][0]
+    delta_y = points[i][1] - points[i - 1][1]
+    delta_z = points[i][2] - points[i - 1][2]
 
-# Побудова дискретних даних для графіка
-x_points = []
-y_points = []
-z_points = []
-for i in range(len(points) - 1):
-    t1, t2 = t_vals[i], t_vals[i + 1]
-    x1, y1, z1 = points[i]
-    x2, y2, z2 = points[i + 1]
-    # Створюємо масив значень параметра для поточного сегменту
-    t_seg = np.linspace(t1, t2, 100)
-    x_seg = x1 + (x2 - x1) / (t2 - t1) * (t_seg - t1)
-    y_seg = y1 + (y2 - y1) / (t2 - t1) * (t_seg - t1)
-    z_seg = z1 + (z2 - z1) / (t2 - t1) * (t_seg - t1)
-    x_points.extend(x_seg)
-    y_points.extend(y_seg)
-    z_points.extend(z_seg)
+    unified_x_expr += delta_x * P_func(t, a_val, w_val)
+    unified_y_expr += delta_y * P_func(t, a_val, w_val)
+    unified_z_expr += delta_z * P_func(t, a_val, w_val)
+
+# Спрощення символьних виразів
+unified_x_expr = sp.simplify(unified_x_expr)
+unified_y_expr = sp.simplify(unified_y_expr)
+unified_z_expr = sp.simplify(unified_z_expr)
+
+print("Єдина символьна формула для x(t):")
+sp.pretty_print(unified_x_expr)
+print("\nЄдина символьна формула для y(t):")
+sp.pretty_print(unified_y_expr)
+print("\nЄдина символьна формула для z(t):")
+sp.pretty_print(unified_z_expr)
+
+# Перетворення символьних виразів у функції для чисельного обчислення
+x_func = sp.lambdify(t, unified_x_expr, 'numpy')
+y_func = sp.lambdify(t, unified_y_expr, 'numpy')
+z_func = sp.lambdify(t, unified_z_expr, 'numpy')
+
+# Побудова сітки значень параметра t
+t_min = t_vals[0]
+t_max = t_vals[-1]
+t_array = np.linspace(t_min, t_max, 400)
+
+# Обчислення координат для ламаної
+x_vals = x_func(t_array)
+y_vals = y_func(t_array)
+z_vals = z_func(t_array)
 
 # Побудова 3D графіка ламаної
 fig = plt.figure(figsize=(8, 6))
 ax = fig.add_subplot(111, projection='3d')
-ax.plot(x_points, y_points, z_points, 'b-', label='Параметрична ламана')
-# Позначаємо вершини
-xp, yp, zp = zip(*points)
-ax.scatter(xp, yp, zp, c='r', s=50, label='Вершини')
+ax.plot(x_vals, y_vals, z_vals, 'b-', label='Уніфікована просторовa ламана')
+
+# Позначення заданих вершин
+vertices_x = [pt[0] for pt in points]
+vertices_y = [pt[1] for pt in points]
+vertices_z = [pt[2] for pt in points]
+ax.scatter(vertices_x, vertices_y, vertices_z, c='r', s=50, label='Вузли')
+# Додаємо підписи до кожної вершини
+for (x_v, y_v, z_v), label in zip(points, vertex_labels):
+    ax.text(x_v, y_v, z_v, f' {label}', color='black', fontsize=12)
 ax.set_xlabel("x")
 ax.set_ylabel("y")
 ax.set_zlabel("z")
-ax.set_title("Контур тетраедра: A → B → C → A → D → C → B → D")
+ax.set_title("Завдання 2.6.2. Параметричне рівняння просторової ламаної")
 ax.legend()
 plt.show()
-
 # =====================================================
 # Завдання 2.7. Параметричні кубічні сплайни (Вар. 3)
 # Дані: для варіанту 3 обираємо точки:
@@ -624,127 +659,184 @@ plt.show()
 print("Завдання 2.7. Параметричні кубічні сплайни (замкнута крива, Вар. 3)")
 
 
+# ===============================
+# 1. Обчислення коефіцієнтів кубічного сплайну для одновимірних даних
+# (модифіковано для повернення вектора других похідних c усіх вузлів)
+# ===============================
 def compute_cubic_spline(x, y, bc_type='natural'):
+    """
+    Обчислює коефіцієнти кубічного сплайну для заданих вузлів x та значень y.
+    bc_type може бути:
+      - 'natural' (натуральний сплайн),
+      - 'clamped' (затиснутий),
+      - 'closed' (замкнений).
+    Повертає кортеж:
+      (a, b, c, d, x)
+    де:
+      a[i] = y[i] (для i = 0, …, n-1),
+      b, c, d – коефіцієнти для кожного сегмента,
+      c – вектор других похідних у всіх вузлах (довжини n+1).
+    """
     n = len(x) - 1
     h = np.diff(x)
     A = np.zeros((n + 1, n + 1))
-    b = np.zeros(n + 1)
+    b_vec = np.zeros(n + 1)
+
+    # Заповнюємо систему для внутрішніх вузлів (i = 1 .. n-1)
     for i in range(1, n):
         A[i, i - 1] = h[i - 1]
         A[i, i] = 2 * (h[i - 1] + h[i])
         A[i, i + 1] = h[i]
-        b[i] = 3 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
+        b_vec[i] = 3 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
+
+    # Задаємо граничні умови
     if bc_type == 'natural':
         A[0, 0] = 1.0
         A[n, n] = 1.0
-        b[0] = 0.0
-        b[n] = 0.0
+        b_vec[0] = 0.0
+        b_vec[n] = 0.0
     elif bc_type == 'clamped':
         A[0, 0] = 2 * h[0]
         A[0, 1] = h[0]
         A[n, n - 1] = h[n - 1]
         A[n, n] = 2 * h[n - 1]
-        b[0] = 3 * ((y[1] - y[0]) / h[0] - 1)
-        b[n] = 3 * (1 - (y[n] - y[n - 1]) / h[n - 1])
+        b_vec[0] = 3 * ((y[1] - y[0]) / h[0] - 1)
+        b_vec[n] = 3 * (1 - (y[n] - y[n - 1]) / h[n - 1])
     elif bc_type == 'closed':
-        # (c) Замкнений сплайн - періодичні граничні умови
-        # Для періодичного сплайну: s0 = sn, s'0 = s'n, s''0 = s''n
-
-        # Перший рядок: s0 = sn
+        # Замкнений сплайн: періодичні умови: s0 = s_n, f(x0)=f(xn)
         A[0, 0] = 1
         A[0, n] = -1
-        b[0] = 0
+        b_vec[0] = 0
 
         # Останній рядок: зв'язок між першою та останньою ділянками
         A[-1, 0] = -2 * h[1]
         A[-1, 1] = -h[1]
         A[-1, -1 - 1] = -h[-1]
         A[-1, -1] = -2 * h[-1]
-        b[-1] = 3 * (((y[-1] - y[-1 - 1]) / h[-1]) - ((y[1] - y[0]) / h[1]))
-    c = np.linalg.solve(A, b)
-    a_coeff = y[:-1]
+        b_vec[-1] = 3 * (((y[-1] - y[-1 - 1]) / h[-1]) - ((y[1] - y[0]) / h[1]))
+    else:
+        raise ValueError("bc_type має бути 'natural', 'clamped' або 'closed'")
+
+    # Розв'язуємо систему для c (другі похідні)
+    c = np.linalg.solve(A, b_vec)
+
+    # Обчислюємо коефіцієнти a, b, d для кожного інтервалу
+    a_coeff = y[:-1]  # f(x_i)
     b_coeff = np.zeros(n)
     d_coeff = np.zeros(n)
     for i in range(n):
         b_coeff[i] = (y[i + 1] - y[i]) / h[i] - h[i] * (2 * c[i] + c[i + 1]) / 3.0
         d_coeff[i] = (c[i + 1] - c[i]) / (3.0 * h[i])
-    return a_coeff, b_coeff, c[:-1], d_coeff, x[:-1]
+    return a_coeff, b_coeff, c, d_coeff, x
 
 
-def evaluate_spline(x_eval, x_knots, coeffs):
-    a, b, c, d, xi = coeffs
-    y_eval = np.zeros_like(x_eval)
-    for i in range(len(x_eval)):
-        idx = np.searchsorted(x_knots, x_eval[i]) - 1
-        if idx < 0:
-            idx = 0
-        if idx >= len(xi):
-            idx = len(xi) - 1
-        dx = x_eval[i] - xi[idx]
-        y_eval[i] = a[idx] + b[idx] * dx + c[idx] * dx ** 2 + d[idx] * dx ** 3
-    return y_eval
+# ===============================
+# 2. Уніфікований символьний запис для параметричних кубічних сплайнів
+# згідно з формулою:
+#
+# S(t) = 1/2 ( p1(t) + pn(t) ) +
+#        (1/12) * Σ{i=1}^{n-1} [ (r''_{i+1}-r''_i)/(t_{i+1}-t_i) - (r''_i-r''_{i-1})/(t_i-t_{i-1}) ] * |t-t_i|^3
+#
+# де для кожної координати (x або y):
+#
+# p(t) = (t_{i+1}-t)^3/(6h) * s_i + (t-t_i)^3/(6h) * s_{i+1}
+#        + ((y_i)/h - h*s_i/6)*(t_{i+1}-t) + ((y_{i+1})/h - h*s_{i+1}/6)*(t-t_i)
+#
+# ===============================
+def unified_symbolic_spline_expr(t_sym, t_arr, y_arr, s):
+    """
+    Будує уніфікований символьний вираз для сплайну y(t)
+    згідно з формулою параметричних кубічних сплайнів.
+
+    Вхідні дані:
+      t_sym - символьна змінна (sp.symbols('t'))
+      t_arr - масив параметрів (вузлових значень t)
+      y_arr - масив значень координати (x або y) у вузлах
+      s     - масив других похідних (s_i) у вузлах, обчислених сплайном
+    """
+    n = len(t_arr) - 1  # кількість сегментів
+    # p1(t): поліном для першого сегмента (i = 0, використовуючи вузли 0 та 1)
+    t0 = t_arr[0]
+    t1 = t_arr[1]
+    h0 = t1 - t0
+    y0 = y_arr[0]
+    y1 = y_arr[1]
+    p1 = ((t1 - t_sym) ** 3 / (6 * h0)) * s[0] + ((t_sym - t0) ** 3 / (6 * h0)) * s[1] \
+         + ((y0) / h0 - h0 * s[0] / 6) * (t1 - t_sym) + ((y1) / h0 - h0 * s[1] / 6) * (t_sym - t0)
+
+    # pn(t): поліном для останнього сегмента (i = n-1, використовуючи вузли n-1 та n)
+    tn_minus1 = t_arr[n - 1]
+    tn = t_arr[n]
+    h_last = tn - tn_minus1
+    y_n_minus1 = y_arr[n - 1]
+    y_n = y_arr[n]
+    pn = ((tn - t_sym) ** 3 / (6 * h_last)) * s[n - 1] + ((t_sym - tn_minus1) ** 3 / (6 * h_last)) * s[n] \
+         + ((y_n_minus1) / h_last - h_last * s[n - 1] / 6) * (tn - t_sym) + ((y_n) / h_last - h_last * s[n] / 6) * (t_sym - tn_minus1)
+
+    sum_term = 0
+    # Сума по внутрішніх вузлах: i = 1, 2, ..., n-1
+    for i in range(1, n):
+        # Різниця других похідних у сусідніх вузлах
+        term = ((s[i + 1] - s[i]) / (t_arr[i + 1] - t_arr[i]) - (s[i] - s[i - 1]) / (t_arr[i] - t_arr[i - 1]))
+        sum_term += term * sp.Abs(t_sym - t_arr[i]) ** 3
+    unified_expr = sp.Rational(1, 2) * (p1 + pn) + sp.Rational(1, 12) * sum_term
+    return sp.simplify(unified_expr)
 
 
-def evaluate_polygon(points, num_points_per_edge=50):
-    poly_x = []
-    poly_y = []
-    for i in range(len(points) - 1):
-        p0 = np.array(points[i])
-        p1 = np.array(points[i + 1])
-        t = np.linspace(0, 1, num_points_per_edge)
-        segment = np.outer(1 - t, p0) + np.outer(t, p1)
-        poly_x.extend(segment[:, 0])
-        poly_y.extend(segment[:, 1])
-    return np.array(poly_x), np.array(poly_y)
+# ===============================
+# 3. Основна частина: побудова параметричних сплайнів
+# ===============================
 
-
-def print_polygon_equations(points):
-    print("Рівняння сегментів полігона:")
-    for i in range(len(points) - 1):
-        x1, y1 = points[i]
-        x2, y2 = points[i + 1]
-        # Якщо відрізок не вертикальний
-        if x2 != x1:
-            m = (y2 - y1) / float(x2 - x1)
-            b = y1 - m * x1
-            print("Сегмент %d: y = %.3f*x + %.3f" % (i + 1, m, b))
-        else:
-            print("Сегмент %d: x = %.3f" % (i + 1, x1))
-
-
-# Задані точки (вузли) для замкнутої кривої
+# Приклад: Задані точки (радіус-вектори) у площині
+# Для прикладу беремо замкнену криву: задано 4 точки, остання повторюється
 points = [(-2, 2), (4, 3), (1, -3), (-4, -5)]
 points_closed = points + [points[0]]
 
-# Призначаємо параметри t: 0, 1, 2, 3, 4
+# Призначаємо параметр t для кожного вузла (монотонно зростаючі значення)
+# Наприклад, рівномірно: t = 0, 1, 2, 3, 4
 t_arr = np.linspace(0, len(points_closed) - 1, len(points_closed))
-x_points = np.array([p[0] for p in points_closed])
-y_points = np.array([p[1] for p in points_closed])
+# Масиви координат
+x_points = np.array([p[0] for p in points_closed], dtype=float)
+y_points = np.array([p[1] for p in points_closed], dtype=float)
 
-# Обчислення коефіцієнтів сплайнів для x та y із замкненими граничними умовами
+# Обчислюємо коефіцієнти сплайнів для x та y з використанням замкнених граничних умов
 coeffs_x = compute_cubic_spline(t_arr, x_points, bc_type='closed')
 coeffs_y = compute_cubic_spline(t_arr, y_points, bc_type='closed')
+# coeffs_x, coeffs_y мають вигляд (a, b, c, d, t_arr)
+# c – вектор других похідних для відповідної координати
 
-# Обчислення точок сплайну
+# Отримуємо масиви других похідних для x та y
+s_x = coeffs_x[2]  # c_x
+s_y = coeffs_y[2]  # c_y
+
+# Визначаємо символьну змінну параметра t
+t_sym = sp.symbols('t', real=True)
+
+# Генеруємо уніфіковані символьні формули для x(t) та y(t)
+unified_x_expr = unified_symbolic_spline_expr(t_sym, t_arr, x_points, s_x)
+unified_y_expr = unified_symbolic_spline_expr(t_sym, t_arr, y_points, s_y)
+
+print("Уніфікована символьна формула для x(t):")
+sp.pretty_print(unified_x_expr)
+print("\nУніфікована символьна формула для y(t):")
+sp.pretty_print(unified_y_expr)
+
+# Перетворюємо символьні вирази у числові функції за допомогою lambdify
+x_func = sp.lambdify(t_sym, unified_x_expr, 'numpy')
+y_func = sp.lambdify(t_sym, unified_y_expr, 'numpy')
+
+# Створюємо щільну сітку значень параметра t для побудови графіку
 t_dense = np.linspace(t_arr[0], t_arr[-1], 400)
-x_dense = evaluate_spline(t_dense, t_arr, coeffs_x)
-y_dense = evaluate_spline(t_dense, t_arr, coeffs_y)
+x_dense = x_func(t_dense)
+y_dense = y_func(t_dense)
 
-# Генеруємо точки полігона (лінійна інтерполяція між вершинами)
-polygon_points = points + [points[0]]
-poly_x, poly_y = evaluate_polygon(polygon_points, num_points_per_edge=50)
-
-# Виведення рівнянь для кожного сегмента полігона
-print_polygon_equations(polygon_points)
-
-# Побудова графіків
+# Побудова графіку параметричної кривої
 plt.figure(figsize=(8, 8))
 plt.plot(x_dense, y_dense, 'b-', linewidth=2, label='Параметричний сплайн')
-plt.plot(poly_x, poly_y, 'g--', linewidth=2, label='Полігон')
 plt.plot(x_points, y_points, 'ro', markersize=8, label='Вузли')
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("Параметричні кубічні сплайни та полігон")
+plt.title("Параметричні кубічні сплайни (уніфікований запис)")
 plt.legend()
 plt.axis('equal')
 plt.grid(True)

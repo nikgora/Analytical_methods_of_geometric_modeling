@@ -372,6 +372,7 @@ ax.set_title("Паралелограм та його контур")
 ax.set_xlabel("X")
 ax.set_ylabel("Y")
 ax.set_zlabel("Z")
+ax.view_init(elev=10, azim=-30, roll=0)
 
 plt.show()
 # =====================================================
@@ -485,67 +486,95 @@ print("Завдання 3.4 Параметричні рівняння повер
 # =====================================================
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import sympy as sp
 
 
-# -----------------------------------------------------
-# Функції для опису координат базового трикутника (piecewise)
-# Параметр v змінюється від 0 до 3 для замкнення контуру
-# -----------------------------------------------------
-def x_b(v):
-    return np.piecewise(
-        v,
-        [(0 <= v) & (v < 1),
-         (1 <= v) & (v < 2),
-         (2 <= v) & (v <= 3)],
-        [
-            lambda v: -1 + v,  # від (-1,0) до (0,1)
-            lambda v: (v - 1),  # від (0,1) до (1,0)
-            lambda v: 1 - 2 * (v - 2)  # від (1,0) назад до (-1,0)
-        ]
-    )
+def bernstein_polyline_symbolic(X, Y):
+    """
+    Обчислює символічний вираз p(x) за формулою Бернштейна для ламаної,
+    заданої контрольними точками (X[i], Y[i]), i = 0,1,...,n.
+
+    Якщо задано лише 2 точки (n=1), повертається звичайна лінійна інтерполяція.
+
+    Формула:
+
+      p(x) = 1/2 * [
+           y0 + (y1-y0)/(x1-x0) * (x - x0)
+         + y_{n-1} + (y_n-y_{n-1})/(x_n-x_{n-1}) * (x - x_{n-1})
+         + Σ_{k=1}^{n-1} { ( (y_{k+1}-y_k)/(x_{k+1}-x_k) - (y_k-y_{k-1})/(x_k-x_{k-1}) ) * |x - x_k| }
+      ]
+
+    Аргументи:
+      X : список або масив контрольних x-координат (довжина n+1)
+      Y : список або масив контрольних y-координат (довжина n+1)
+
+    Повертає:
+      Символьний вираз p(x) (Sympy expression).
+    """
+    # Символьна змінна x
+    x = sp.symbols('x')
+
+    n = len(X) - 1  # якщо n=1 => 2 точки
+    if n == 1:
+        expr = Y[0] + (Y[1] - Y[0]) / (X[1] - X[0]) * (x - X[0])
+        return sp.simplify(expr)
+
+    # Обчислюємо внесок крайових (лівий та правий)
+    term_left = Y[0] + (Y[1] - Y[0]) / (X[1] - X[0]) * (x - X[0])
+    term_right = Y[n - 1] + (Y[n] - Y[n - 1]) / (X[n] - X[n - 1]) * (x - X[n - 1])
+
+    # Обчислюємо суму по внутрішнім вузлам k = 1,2,..., n-1
+    sum_internal = 0
+    for k in range(1, n):
+        slope_plus = (Y[k + 1] - Y[k]) / (X[k + 1] - X[k])
+        slope_minus = (Y[k] - Y[k - 1]) / (X[k] - X[k - 1])
+        sum_internal += (slope_plus - slope_minus) * sp.Abs(x - X[k])
+
+    expr = sp.Rational(1, 2) * (term_left + term_right + sum_internal)
+    expr = sp.simplify(expr)
+    return expr
 
 
-def y_b(v):
-    return np.piecewise(
-        v,
-        [(0 <= v) & (v < 1),
-         (1 <= v) & (v < 2),
-         (2 <= v) & (v <= 3)],
-        [
-            lambda v: v,  # від (-1,0) до (0,1)
-            lambda v: 1 - (v - 1),  # від (0,1) до (1,0)
-            lambda v: 0 * np.ones_like(v)  # від (1,0) назад до (-1,0)
-        ]
-    )
+# =============================================================================
+# Приклад використання.
+# Контрольні точки можуть бути будь-якої кількості, наприклад:
+# X = [1,2,3,4,5] та Y = [1,1,62,123,1]
+# =============================================================================
+# Задаємо контрольні точки
+X = [-1, 0, 1]
+Y = [0, 1, 0]
 
+# Отримуємо символічний вираз p(x)
+p_expr = bernstein_polyline_symbolic(X, Y)
 
-# Створюємо масив параметрів v для побудови контуру
-v_vals = np.linspace(0, 3, 100)
-x_vals = x_b(v_vals)
-y_vals = y_b(v_vals)
-z_vals = np.zeros_like(v_vals)  # z=0 для всіх точок
+# Виводимо отриману формулу
+print("Символічна формула p(x) для заданих контрольних точок:")
+sp.pretty_print(p_expr)
 
-# -----------------------------------------------------
-# Побудова 3D-графіка
-# -----------------------------------------------------
-fig = plt.figure(figsize=(8, 6))
+# Перетворюємо символічний вираз у чисельну функцію для обчислення
+p_func = sp.lambdify(sp.symbols('x'), p_expr, 'numpy')
+
+# Створюємо щільну сітку значень x (тобто безперервну функцію)
+x_vals = np.linspace(X[0], X[-1], 500)
+y_vals = p_func(x_vals)
+
+# Побудова графіка (у 3D; оскільки крива лежить у площині XY, використаємо z=0)
+fig = plt.figure(figsize=(10, 6))
 ax = fig.add_subplot(111, projection='3d')
-
-# Малюємо контур трикутника
-ax.plot(x_vals, y_vals, z_vals, label="Контур трикутника", lw=2)
-
-# Малюємо вершини червоними крапками
-vertices_x = np.array([-1, 0, 1])
-vertices_y = np.array([0, 1, 0])
-vertices_z = np.array([0, 0, 0])
-ax.scatter(vertices_x, vertices_y, vertices_z, color='red', s=50, label="Вершини")
-
-# Налаштування осей та заголовку
-ax.set_title("Базовий трикутник в 3D (z = 0)")
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
+ax.plot(x_vals, y_vals, np.zeros_like(x_vals), label="Bernstein Polyline", lw=2, color='blue')
+ax.scatter(X, Y, np.zeros_like(X), color='red', s=50, label="Контрольні точки")
+ax.set_title("Bernstein Polyline Interpolation")
+ax.set_xlabel("x")
+ax.set_ylabel("y")
+ax.set_zlabel("z")
 ax.legend()
+
+# Масштабування осей
+max_range = max(np.ptp(x_vals), np.ptp(y_vals)) / 2
+mid_x = 0.5 * (x_vals.min() + x_vals.max())
+mid_y = 0.5 * (y_vals.min() + y_vals.max())
+ax.set_xlim(mid_x - max_range, mid_x + max_range)
+ax.set_ylim(mid_y - max_range, mid_y + max_range)
+ax.set_zlim(-0.5, 0.5)
 
 plt.show()
