@@ -241,7 +241,7 @@ plt.show()
 #   (a) кубічний сплайн із затисненням (clamped): f'(x0)=f'(xn)=1,
 #   (b) натуральний сплайн: f''(x0)=f''(xn)=0.
 # Використовуємо scipy.interpolate.CubicSpline [&#8203;:contentReference[oaicite:3]{index=3}].
-# TODO єдиний формульний вираз
+#
 # =====================================================
 print("Завдання 2.4. Кубічні сплайни")
 
@@ -250,70 +250,165 @@ import matplotlib.pyplot as plt
 import sympy as sp
 
 
-# =====================================================
-# Функція обчислення коефіцієнтів кубічного сплайну
-# =====================================================
-def compute_cubic_spline(x, y, bc_type='natural'):
-    n = len(x) - 1
-    h = np.diff(x)
+def compute_cubic_spline(x, y, bc_type='natural', g0=None, gn=None):
+    """
+    Обчислює коефіцієнти кубічного сплайну для заданих вузлів x та значень y.
+
+    Параметри:
+      x, y       : послідовності координат вузлів
+      bc_type    : 'natural' (натуральний), 'clamped' (затиснутий) або 'closed' (замкнений)
+      g0, gn     : значення похідних у крайніх точках (для 'clamped')
+
+    Повертає:
+      (a, b, c, d, x, s)
+      де a, b, c, d – коефіцієнти для кожного інтервалу [x[i], x[i+1]],
+      x – масив вузлів,
+      s – обчислені значення других похідних у вузлах (довжини n+1).
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    n = len(x) - 1  # кількість інтервалів
+    h = np.diff(x)  # h[i] = x[i+1] - x[i]
+
     A = np.zeros((n + 1, n + 1))
     b_vec = np.zeros(n + 1)
 
-    # Система для внутрішніх вузлів (i = 1 .. n-1)
-    for i in range(1, n):
-        A[i, i - 1] = h[i - 1]
-        A[i, i] = 2 * (h[i - 1] + h[i])
-        A[i, i + 1] = h[i]
-        b_vec[i] = 3 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
-
-    # Задаємо крайові умови
     if bc_type == 'natural':
-        A[0, 0] = 1.0
-        A[n, n] = 1.0
+        # Натуральний сплайн: s0 = 0, sn = 0
+        A[0, 0] = 1
+        A[n, n] = 1
+        for i in range(1, n):
+            A[i, i - 1] = h[i - 1]
+            A[i, i] = 2 * (h[i - 1] + h[i])
+            A[i, i + 1] = h[i]
+            b_vec[i] = 6 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
         b_vec[0] = 0.0
         b_vec[n] = 0.0
+
     elif bc_type == 'clamped':
-        # Для clamped сплайну f'(x₀)=f'(xₙ)=1
+        # Затиснутий сплайн: p'(x0) = g0, p'(xn) = gn
+        if g0 is None or gn is None:
+            raise ValueError("Для 'clamped' сплайну потрібно задати g0 та gn")
         A[0, 0] = 2 * h[0]
         A[0, 1] = h[0]
+        b_vec[0] = 6 * ((y[1] - y[0]) / h[0] - g0)
         A[n, n - 1] = h[n - 1]
         A[n, n] = 2 * h[n - 1]
-        b_vec[0] = 3 * ((y[1] - y[0]) / h[0] - 1)
-        b_vec[n] = 3 * (1 - (y[n] - y[n - 1]) / h[n - 1])
+        b_vec[n] = 6 * (gn - (y[n] - y[n - 1]) / h[n - 1])
+        for i in range(1, n):
+            A[i, i - 1] = h[i - 1]
+            A[i, i] = 2 * (h[i - 1] + h[i])
+            A[i, i + 1] = h[i]
+            b_vec[i] = 6 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
+
+    elif bc_type == 'closed':
+        # Замкнений сплайн: періодичні умови
+        # s0 = sn, а також рівність похідних у кінцях
+        A[0, 0] = 1
+        A[0, n] = -1
+        b_vec[0] = 0
+        for i in range(1, n):
+            A[i, i - 1] = h[i - 1]
+            A[i, i] = 2 * (h[i - 1] + h[i])
+            A[i, i + 1] = h[i]
+            b_vec[i] = 6 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
+        # Останній рядок для рівності перших похідних у точках x0 і xn
+        A[n, 0] = -2 * h[0]
+        A[0, 0] = 1
+        A[0, n] = -1
+        A[n, 1] = -h[0]
+        A[n, n - 1] = -h[n - 1]
+        A[n, n] = -2 * (h[n - 1])
+        b_vec[0] = 0
+        b_vec[n] = 6 * ((y[n - 1] - y[n - 1 - 1]) / h[n - 1] - (y[1] - y[0]) / h[1])
     else:
-        raise ValueError("bc_type має бути 'natural' або 'clamped'")
+        raise ValueError("bc_type має бути 'natural', 'clamped' або 'closed'")
 
-    # Розв'язуємо систему для c (коефіцієнти, пов'язані з похідними)
-    c = np.linalg.solve(A, b_vec)
+    # Розв'язуємо систему для визначення s (других похідних)
+    s = np.linalg.solve(A, b_vec)
 
-    # Обчислюємо коефіцієнти a, b та d для кожного інтервалу
-    a_coef = y[:-1]  # значення функції в початкових точках інтервалів
-    b_coef = np.zeros(n)
-    d_coef = np.zeros(n)
-    for i in range(n):
-        b_coef[i] = (y[i + 1] - y[i]) / h[i] - h[i] * (2 * c[i] + c[i + 1]) / 3
-        d_coef[i] = (c[i + 1] - c[i]) / (3 * h[i])
-
-    return a_coef, b_coef, c[:-1], d_coef, x
+    return s
 
 
 # =====================================================
 # Функція обчислення значень сплайну для побудови графіку
 # =====================================================
-def evaluate_spline(x_eval, coeffs):
-    a_coef, b_coef, c_coef, d_coef, knots = coeffs
-    y_eval = np.zeros_like(x_eval)
-    n = len(a_coef)
-    for j, x_val in enumerate(x_eval):
-        # Знаходимо відповідний інтервал
-        i = np.searchsorted(knots, x_val) - 1
-        if i < 0:
-            i = 0
-        elif i >= n:
-            i = n - 1
-        dx = x_val - knots[i]
-        y_eval[j] = a_coef[i] + b_coef[i] * dx + c_coef[i] * dx ** 2 + d_coef[i] * dx ** 3
-    return y_eval
+def evaluate_spline_formula(x_eval, x, y, s):
+    """
+    Обчислює значення кубічного сплайну в точках x_eval
+    за формулою:
+      p_i(x) = s[i-1]*(x_i - x)^3/(6h) + s[i]*(x - x[i-1])^3/(6h) +
+               (y[i-1]/h - s[i-1]*h/6)*(x_i - x) + (y[i]/h - s[i]*h/6)*(x - x[i-1])
+    для кожного інтервалу [x[i-1], x[i]].
+
+    Параметри:
+      x_eval : масив точок, де обчислюється сплайн;
+      x      : масив вузлів (розмір n+1);
+      y      : значення функції у вузлах;
+      s      : обчислені другі похідні у вузлах (розмір n+1).
+
+    Повертає:
+      y_eval : масив значень сплайну в точках x_eval.
+    """
+    x_eval = np.asarray(x_eval)
+    y_eval = np.empty_like(x_eval)
+    n = len(x) - 1  # кількість інтервалів
+    a_arr = np.zeros(n)
+    b_arr = np.zeros(n)
+    c_arr = np.zeros(n)
+    d_arr = np.zeros(n)
+    for j, xv in enumerate(x_eval):
+        # Знаходимо індекс інтервалу, в якому знаходиться xv
+        i = np.searchsorted(x, xv)
+        if i == 0:
+            i = 1
+        if i > n:
+            i = n
+        h = x[i] - x[i - 1]
+        term1 = s[i - 1] * (x[i] - xv) ** 3 / (6 * h)
+        term2 = s[i] * (xv - x[i - 1]) ** 3 / (6 * h)
+        term3 = (y[i - 1] / h - s[i - 1] * h / 6) * (x[i] - xv)
+        term4 = (y[i] / h - s[i] * h / 6) * (xv - x[i - 1])
+        a_arr[i - 1] = term1
+        b_arr[i - 1] = term2
+        c_arr[i - 1] = term3
+        d_arr[i - 1] = term4
+        y_eval[j] = term1 + term2 + term3 + term4
+
+    return y_eval, a_arr, b_arr, c_arr, d_arr
+
+
+def generate_symbolic_unified_spline_formula(x_vals, y_vals, s_vals, sym=x):
+    h1 = x_vals[1] - x_vals[0]
+    p1_expr = (s_vals[0] * (x_vals[1] - sym) ** 3 / (6 * h1) +
+               s_vals[1] * (sym - x_vals[0]) ** 3 / (6 * h1) +
+               (y_vals[0] / h1 - s_vals[0] * h1 / 6) * (x_vals[1] - sym) +
+               (y_vals[1] / h1 - s_vals[1] * h1 / 6) * (sym - x_vals[0]))
+
+    # p_n(x): остання ланка, для інтервалу [x_{n-1}, x_n]
+    h_last = x_vals[-1] - x_vals[-2]
+    p_n_expr = (s_vals[-2] * (x_vals[-1] - sym) ** 3 / (6 * h_last) +
+                s_vals[-1] * (sym - x_vals[-2]) ** 3 / (6 * h_last) +
+                (y_vals[-2] / h_last - s_vals[-2] * h_last / 6) * (x_vals[-1] - sym) +
+                (y_vals[-1] / h_last - s_vals[-1] * h_last / 6) * (sym - x_vals[-2]))
+
+    # Початковий вираз – середнє від p1(x) та p_n(x)
+    unified_expr = sp.Rational(1, 2) * (p1_expr + p_n_expr)
+    summation_expr = 0
+    n = len(s_vals) - 1  # кількість інтервалів
+    for k in range(1, n):
+        # (s[k+1] - s[k])/(x[k+1] - x[k]) - (s[k] - s[k-1])/(x[k] - x[k-1])
+        diff_term = ((s_vals[k + 1] - s_vals[k]) / (x_vals[k + 1] - x_vals[k])
+                     - (s_vals[k] - s_vals[k - 1]) / (x_vals[k] - x_vals[k - 1]))
+
+        term = diff_term * sp.Pow(sp.Abs(sym - x_vals[k]), 3, evaluate=False)
+        # sp.pprint(sp.Pow(sp.Abs(sym - x_vals[k]), 3, evaluate=False))
+        # sp.pprint(sp.Pow(sp.Abs(sym - x_vals[k]), 3))
+        summation_expr += term
+
+    unified_expr += sp.Rational(1, 12) * summation_expr
+    print("end calculation")
+    return sp.simplify(unified_expr)
 
 
 # =====================================================
@@ -326,18 +421,19 @@ Y_arr = np.array([-4, -5, 3, -4], dtype=float)
 
 # Обчислення коефіцієнтів для сплайнів з двома крайовими умовами
 coeffs_natural = compute_cubic_spline(X_arr, Y_arr, bc_type='natural')
-coeffs_clamped = compute_cubic_spline(X_arr, Y_arr, bc_type='clamped')
-
+coeffs_clamped = compute_cubic_spline(X_arr, Y_arr, bc_type='clamped', g0=1, gn=1)
 # Виведення символьних формул
 print("Символьний єдиний формульний вираз для кубічного сплайну (natural):")
+sym_expr_natural = generate_symbolic_unified_spline_formula(X_arr, Y_arr, coeffs_natural)
 sp.pprint(sym_expr_natural)
 print("\nСимвольний єдиний формульний вираз для кубічного сплайну (clamped):")
-sp.pprint(sym_expr_clamped)
+sym_exr_clamped = generate_symbolic_unified_spline_formula(X_arr, Y_arr, coeffs_clamped)
+sp.pprint(sym_exr_clamped)
 
 # Побудова графіка з обома сплайнами
 x_vals = np.linspace(X_arr[0] - 1, X_arr[-1] + 1, 400)
-y_natural = evaluate_spline(x_vals, coeffs_natural)
-y_clamped = evaluate_spline(x_vals, coeffs_clamped)
+y_natural, a_natural, b_natural, c_natural, d_natural = evaluate_spline_formula(x_vals, X_arr, Y_arr, coeffs_natural)
+y_clamped, a_clamped, b_clamped, c_clamped, d_clamped = evaluate_spline_formula(x_vals, X_arr, Y_arr, coeffs_clamped)
 
 plt.figure(figsize=(8, 5))
 plt.plot(x_vals, y_natural, 'g--', label="Natural Spline")
@@ -346,6 +442,26 @@ plt.plot(X_arr, Y_arr, 'ro', markersize=8, label="Опорні точки")
 plt.xlabel("x")
 plt.ylabel("S(x)")
 plt.title("Кубічні сплайни: natural та clamped")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# Перетворення символьних виразів у числові функції
+natural_func = sp.lambdify(x, sym_expr_natural, "numpy")
+clamped_func = sp.lambdify(x, sym_exr_clamped, "numpy")
+
+# Побудова графіка з обома сплайнами
+x_vals = np.linspace(X_arr[0] - 1, X_arr[-1] + 1, 400)
+y_natural = natural_func(x_vals)
+y_clamped = clamped_func(x_vals)
+
+plt.figure(figsize=(8, 5))
+plt.plot(x_vals, y_natural, 'g--', label="Natural Spline (єдиний вираз)")
+plt.plot(x_vals, y_clamped, 'b-', label="Clamped Spline (єдиний вираз)")
+plt.plot(X_arr, Y_arr, 'ro', markersize=8, label="Опорні точки")
+plt.xlabel("x")
+plt.ylabel("S(x)")
+plt.title("Кубічні сплайни: natural та clamped (побудовані за єдиним виразом)")
 plt.legend()
 plt.grid(True)
 plt.show()
@@ -656,141 +772,12 @@ plt.show()
 #   [(-2, 2), (4, 3), (1, -3), (-4, -5)]
 # Для замкнутої кривої повторимо першу точку.
 # =====================================================
-print("Завдання 2.7. Параметричні кубічні сплайни (замкнута крива, Вар. 3)")
-
-
-# ===============================
-# 1. Обчислення коефіцієнтів кубічного сплайну для одновимірних даних
-# (модифіковано для повернення вектора других похідних c усіх вузлів)
-# ===============================
-def compute_cubic_spline(x, y, bc_type='natural'):
-    """
-    Обчислює коефіцієнти кубічного сплайну для заданих вузлів x та значень y.
-    bc_type може бути:
-      - 'natural' (натуральний сплайн),
-      - 'clamped' (затиснутий),
-      - 'closed' (замкнений).
-    Повертає кортеж:
-      (a, b, c, d, x)
-    де:
-      a[i] = y[i] (для i = 0, …, n-1),
-      b, c, d – коефіцієнти для кожного сегмента,
-      c – вектор других похідних у всіх вузлах (довжини n+1).
-    """
-    n = len(x) - 1
-    h = np.diff(x)
-    A = np.zeros((n + 1, n + 1))
-    b_vec = np.zeros(n + 1)
-
-    # Заповнюємо систему для внутрішніх вузлів (i = 1 .. n-1)
-    for i in range(1, n):
-        A[i, i - 1] = h[i - 1]
-        A[i, i] = 2 * (h[i - 1] + h[i])
-        A[i, i + 1] = h[i]
-        b_vec[i] = 3 * ((y[i + 1] - y[i]) / h[i] - (y[i] - y[i - 1]) / h[i - 1])
-
-    # Задаємо граничні умови
-    if bc_type == 'natural':
-        A[0, 0] = 1.0
-        A[n, n] = 1.0
-        b_vec[0] = 0.0
-        b_vec[n] = 0.0
-    elif bc_type == 'clamped':
-        A[0, 0] = 2 * h[0]
-        A[0, 1] = h[0]
-        A[n, n - 1] = h[n - 1]
-        A[n, n] = 2 * h[n - 1]
-        b_vec[0] = 3 * ((y[1] - y[0]) / h[0] - 1)
-        b_vec[n] = 3 * (1 - (y[n] - y[n - 1]) / h[n - 1])
-    elif bc_type == 'closed':
-        # Замкнений сплайн: періодичні умови: s0 = s_n, f(x0)=f(xn)
-        A[0, 0] = 1
-        A[0, n] = -1
-        b_vec[0] = 0
-
-        # Останній рядок: зв'язок між першою та останньою ділянками
-        A[-1, 0] = -2 * h[1]
-        A[-1, 1] = -h[1]
-        A[-1, -1 - 1] = -h[-1]
-        A[-1, -1] = -2 * h[-1]
-        b_vec[-1] = 3 * (((y[-1] - y[-1 - 1]) / h[-1]) - ((y[1] - y[0]) / h[1]))
-    else:
-        raise ValueError("bc_type має бути 'natural', 'clamped' або 'closed'")
-
-    # Розв'язуємо систему для c (другі похідні)
-    c = np.linalg.solve(A, b_vec)
-
-    # Обчислюємо коефіцієнти a, b, d для кожного інтервалу
-    a_coeff = y[:-1]  # f(x_i)
-    b_coeff = np.zeros(n)
-    d_coeff = np.zeros(n)
-    for i in range(n):
-        b_coeff[i] = (y[i + 1] - y[i]) / h[i] - h[i] * (2 * c[i] + c[i + 1]) / 3.0
-        d_coeff[i] = (c[i + 1] - c[i]) / (3.0 * h[i])
-    return a_coeff, b_coeff, c, d_coeff, x
-
-
-# ===============================
-# 2. Уніфікований символьний запис для параметричних кубічних сплайнів
-# згідно з формулою:
-#
-# S(t) = 1/2 ( p1(t) + pn(t) ) +
-#        (1/12) * Σ{i=1}^{n-1} [ (r''_{i+1}-r''_i)/(t_{i+1}-t_i) - (r''_i-r''_{i-1})/(t_i-t_{i-1}) ] * |t-t_i|^3
-#
-# де для кожної координати (x або y):
-#
-# p(t) = (t_{i+1}-t)^3/(6h) * s_i + (t-t_i)^3/(6h) * s_{i+1}
-#        + ((y_i)/h - h*s_i/6)*(t_{i+1}-t) + ((y_{i+1})/h - h*s_{i+1}/6)*(t-t_i)
-#
-# ===============================
-def unified_symbolic_spline_expr(t_sym, t_arr, y_arr, s):
-    """
-    Будує уніфікований символьний вираз для сплайну y(t)
-    згідно з формулою параметричних кубічних сплайнів.
-
-    Вхідні дані:
-      t_sym - символьна змінна (sp.symbols('t'))
-      t_arr - масив параметрів (вузлових значень t)
-      y_arr - масив значень координати (x або y) у вузлах
-      s     - масив других похідних (s_i) у вузлах, обчислених сплайном
-    """
-    n = len(t_arr) - 1  # кількість сегментів
-    # p1(t): поліном для першого сегмента (i = 0, використовуючи вузли 0 та 1)
-    t0 = t_arr[0]
-    t1 = t_arr[1]
-    h0 = t1 - t0
-    y0 = y_arr[0]
-    y1 = y_arr[1]
-    p1 = ((t1 - t_sym) ** 3 / (6 * h0)) * s[0] + ((t_sym - t0) ** 3 / (6 * h0)) * s[1] \
-         + ((y0) / h0 - h0 * s[0] / 6) * (t1 - t_sym) + ((y1) / h0 - h0 * s[1] / 6) * (t_sym - t0)
-
-    # pn(t): поліном для останнього сегмента (i = n-1, використовуючи вузли n-1 та n)
-    tn_minus1 = t_arr[n - 1]
-    tn = t_arr[n]
-    h_last = tn - tn_minus1
-    y_n_minus1 = y_arr[n - 1]
-    y_n = y_arr[n]
-    pn = ((tn - t_sym) ** 3 / (6 * h_last)) * s[n - 1] + ((t_sym - tn_minus1) ** 3 / (6 * h_last)) * s[n] \
-         + ((y_n_minus1) / h_last - h_last * s[n - 1] / 6) * (tn - t_sym) + ((y_n) / h_last - h_last * s[n] / 6) * (t_sym - tn_minus1)
-
-    sum_term = 0
-    # Сума по внутрішніх вузлах: i = 1, 2, ..., n-1
-    for i in range(1, n):
-        # Різниця других похідних у сусідніх вузлах
-        term = ((s[i + 1] - s[i]) / (t_arr[i + 1] - t_arr[i]) - (s[i] - s[i - 1]) / (t_arr[i] - t_arr[i - 1]))
-        sum_term += term * sp.Abs(t_sym - t_arr[i]) ** 3
-    unified_expr = sp.Rational(1, 2) * (p1 + pn) + sp.Rational(1, 12) * sum_term
-    return sp.simplify(unified_expr)
-
-
-# ===============================
-# 3. Основна частина: побудова параметричних сплайнів
-# ===============================
+print("Завдання 2.7. Параметричні кубічні сплайни та чотирикутник (замкнута крива, Вар. 3)")
 
 # Приклад: Задані точки (радіус-вектори) у площині
 # Для прикладу беремо замкнену криву: задано 4 точки, остання повторюється
 points = [(-2, 2), (4, 3), (1, -3), (-4, -5)]
-points_closed = points + [points[0]]
+points_closed = points + [points[0]]  # замкнена крива повертається до початкової точки
 
 # Призначаємо параметр t для кожного вузла (монотонно зростаючі значення)
 # Наприклад, рівномірно: t = 0, 1, 2, 3, 4
@@ -800,43 +787,80 @@ x_points = np.array([p[0] for p in points_closed], dtype=float)
 y_points = np.array([p[1] for p in points_closed], dtype=float)
 
 # Обчислюємо коефіцієнти сплайнів для x та y з використанням замкнених граничних умов
-coeffs_x = compute_cubic_spline(t_arr, x_points, bc_type='closed')
-coeffs_y = compute_cubic_spline(t_arr, y_points, bc_type='closed')
-# coeffs_x, coeffs_y мають вигляд (a, b, c, d, t_arr)
-# c – вектор других похідних для відповідної координати
-
-# Отримуємо масиви других похідних для x та y
-s_x = coeffs_x[2]  # c_x
-s_y = coeffs_y[2]  # c_y
+s_x = compute_cubic_spline(t_arr, x_points, bc_type='closed')
+s_y = compute_cubic_spline(t_arr, y_points, bc_type='closed')
 
 # Визначаємо символьну змінну параметра t
 t_sym = sp.symbols('t', real=True)
 
 # Генеруємо уніфіковані символьні формули для x(t) та y(t)
-unified_x_expr = unified_symbolic_spline_expr(t_sym, t_arr, x_points, s_x)
-unified_y_expr = unified_symbolic_spline_expr(t_sym, t_arr, y_points, s_y)
+unified_x_expr = generate_symbolic_unified_spline_formula(t_arr, x_points, s_x, t_sym)
+unified_y_expr = generate_symbolic_unified_spline_formula(t_arr, y_points, s_y, t_sym)
 
-print("Уніфікована символьна формула для x(t):")
+print("Уніфікована символьна формула для x(t) сплайну:")
 sp.pretty_print(unified_x_expr)
-print("\nУніфікована символьна формула для y(t):")
+print("\nУніфікована символьна формула для y(t) сплайну:")
 sp.pretty_print(unified_y_expr)
 
 # Перетворюємо символьні вирази у числові функції за допомогою lambdify
 x_func = sp.lambdify(t_sym, unified_x_expr, 'numpy')
 y_func = sp.lambdify(t_sym, unified_y_expr, 'numpy')
 
-# Створюємо щільну сітку значень параметра t для побудови графіку
+# Створюємо щільну сітку значень параметра t для побудови графіку сплайну
 t_dense = np.linspace(t_arr[0], t_arr[-1], 400)
 x_dense = x_func(t_dense)
 y_dense = y_func(t_dense)
 
-# Побудова графіку параметричної кривої
-plt.figure(figsize=(8, 8))
+
+# Генеруємо параметричні рівняння для чотирикутника
+# Допоміжна функція P(t, a, w) для параметризації ламаної
+def P_func(t_sym, a, w):
+    return (1 / (2 * w)) * (w + sp.Abs(t_sym - a) - sp.Abs(t_sym - a - w))
+
+
+# Ініціалізуємо формули для x(t) та y(t) чотирикутника
+quad_x_expr = sp.Float(points[0][0])
+quad_y_expr = sp.Float(points[0][1])
+
+# Значення параметра t для вершин чотирикутника
+t_quad = list(range(len(points_closed)))
+
+# Будуємо параметричні формули для x(t) та y(t)
+for i in range(1, len(points_closed)):
+    delta_x = points_closed[i][0] - points_closed[i - 1][0]
+    delta_y = points_closed[i][1] - points_closed[i - 1][1]
+    a = t_quad[i - 1]
+    w = t_quad[i] - t_quad[i - 1]
+    quad_x_expr += delta_x * P_func(t_sym, a, w)
+    quad_y_expr += delta_y * P_func(t_sym, a, w)
+
+print("\nУніфікована символьна формула для x(t) чотирикутника:")
+sp.pretty_print(sp.simplify(quad_x_expr))
+print("\nУніфікована символьна формула для y(t) чотирикутника:")
+sp.pretty_print(sp.simplify(quad_y_expr))
+
+# Перетворюємо формули чотирикутника у числові функції
+quad_x_func = sp.lambdify(t_sym, quad_x_expr, 'numpy')
+quad_y_func = sp.lambdify(t_sym, quad_y_expr, 'numpy')
+
+# Створюємо сітку значень для чотирикутника
+t_quad_dense = np.linspace(t_quad[0], t_quad[-1], 200)
+x_quad_dense = quad_x_func(t_quad_dense)
+y_quad_dense = quad_y_func(t_quad_dense)
+
+# Побудова графіку з обома кривими
+plt.figure(figsize=(10, 8))
 plt.plot(x_dense, y_dense, 'b-', linewidth=2, label='Параметричний сплайн')
+plt.plot(x_quad_dense, y_quad_dense, 'g--', linewidth=1.5, label='Параметричний чотирикутник')
 plt.plot(x_points, y_points, 'ro', markersize=8, label='Вузли')
+
+# Додаємо підписи до вузлів
+for i, (x, y) in enumerate(points):
+    plt.text(x + 0.2, y + 0.2, f'P{i + 1}', fontsize=12)
+
 plt.xlabel("x")
 plt.ylabel("y")
-plt.title("Параметричні кубічні сплайни (уніфікований запис)")
+plt.title("Параметричні криві через 4 точки")
 plt.legend()
 plt.axis('equal')
 plt.grid(True)
