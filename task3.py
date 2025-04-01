@@ -1,94 +1,145 @@
 # =====================================
-# Завдання 3.1, варіант 3 (обертання навколо OZ)
+# Завдання 3.1, варіант 3 (обертання навколо OX)
 # =====================================
 print("Завдання 3.1. Обертання фігури навколо осі ")
+import sympy as sp
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+import pyvista as pv
+
+# Оголошення символьних змінних
+t, u, v = sp.symbols('t u v', real=True)
 
 
-def revolve_line_around_x(x1, y1, x2, y2, n_t=50, n_phi=50):
-    """
-    Повертає X, Y, Z – 2D-сітки координат для лінії від (x1, y1) до (x2, y2),
-    оберненої навколо осі OX.
-    n_t, n_phi – кількість точок для параметрів t та phi.
-    """
-    # Параметр t для відрізка [0,1]
-    t = np.linspace(0, 1, n_t)
-    # Параметр phi для обертання [0, 2*pi]
-    phi = np.linspace(0, 2 * np.pi, n_phi)
-
-    # Створюємо 2D-сітки для t і phi
-    T, PHI = np.meshgrid(t, phi)
-
-    # Параметризація відрізка в площині XY:
-    # x змінюється лінійно, y – відстань від осі обертання (ось OX)
-    X_line = x1 + (x2 - x1) * T
-    Y_line = y1 + (y2 - y1) * T
-
-    # Обертання навколо осі OX: координата X залишається, а Y та Z визначають коло
-    X = X_line
-    Y = Y_line * np.cos(PHI)
-    Z = Y_line * np.sin(PHI)
-
-    return X, Y, Z
+# Функція P(t, a, w) для інтерполяції ламаної:
+# P(t, a, w) = 1/(2w) * (w + |t - a| - |t - a - w|)
+def P(a, w):
+    return (1 / (2 * w)) * (w + sp.Abs(t - a) - sp.Abs(t - a - w))
 
 
-# Задаємо вершини фігури
-A = (0, 0)
-B = (4, 0)  # нижня основа, вісь обертання
-F = (4, 1)
-D = (2.8, 2)
-C = (1.2, 2)
-E = (0, 1)
+# Функція для побудови символьних виразів ламаної для довільної кількості вершин
+def build_polyline_expr(vertices, t_values=None):
+    n = len(vertices)
+    # Якщо значення параметра не задані – рівномірний розподіл: 0, 1, 2, ..., n-1
+    if t_values is None:
+        t_values = list(range(n))
+    if len(t_values) != n:
+        raise ValueError("Кількість значень параметра має дорівнювати кількості вершин.")
 
-# Побудова початкової фігури як замкненого полігону (z=0)
-polygon = np.array([
-    [A[0], A[1], 0],
-    [B[0], B[1], 0],
-    [F[0], F[1], 0],
-    [D[0], D[1], 0],
-    [C[0], C[1], 0],
-    [E[0], E[1], 0],
-    [A[0], A[1], 0]  # повертаємось до A
-])
+    # Початкове положення – перша вершина
+    x_expr = sp.sympify(vertices[0][0])
+    y_expr = sp.sympify(vertices[0][1])
+    # Додаємо внески для кожного відрізка ламаної
+    for i in range(1, n):
+        dt = t_values[i] - t_values[i - 1]
+        dx = vertices[i][0] - vertices[i - 1][0]
+        dy = vertices[i][1] - vertices[i - 1][1]
+        x_expr += dx * P(t_values[i - 1], dt)
+        y_expr += dy * P(t_values[i - 1], dt)
+    return sp.simplify(x_expr), sp.simplify(y_expr), t_values
 
-# Обчислюємо поверхні обертання для кожного відрізка, окрім A-B (віссю обертання)
-X_BF, Y_BF, Z_BF = revolve_line_around_x(B[0], B[1], F[0], F[1])
-X_FD, Y_FD, Z_FD = revolve_line_around_x(F[0], F[1], D[0], D[1])
-X_DC, Y_DC, Z_DC = revolve_line_around_x(D[0], D[1], C[0], C[1])
-X_CE, Y_CE, Z_CE = revolve_line_around_x(C[0], C[1], E[0], E[1])
-X_EA, Y_EA, Z_EA = revolve_line_around_x(E[0], E[1], A[0], A[1])
 
-# Створюємо 3D-сцену
-fig = plt.figure(figsize=(10, 8))
-ax = fig.add_subplot(111, projection='3d')
+# Задаємо список вершин ламаної.
+# Наприклад, остання точка (0,0) закриває ламану.
+vertices = [(0, 0), (2, 0), (2, 1), (1.5, 2), (0.5, 2), (0, 1), (0, 0)]
 
-# Малюємо початковий полігон (фігуру) у площині z=0
-ax.plot(polygon[:, 0], polygon[:, 1], polygon[:, 2], color='k', linewidth=2, marker='o', label='Початкова фігура')
+# Отримуємо символьні вирази для x(t) та y(t)
+x_expr, y_expr, t_vals_sym = build_polyline_expr(vertices)
 
-# Налаштовуємо параметри для відображення поверхонь
-surf_kwargs = dict(rstride=1, cstride=1, cmap='viridis', alpha=0.7, edgecolor='none')
+# Будуємо параметричне рівняння поверхні обертання навколо осі OX:
+# X(u, v) = x(u), Y(u, v) = y(u)*cos(v), Z(u, v) = y(u)*sin(v)
+X_expr = x_expr
+Y_expr = y_expr * sp.cos(v)
+Z_expr = y_expr * sp.sin(v)
 
-# Малюємо поверхні обертання для кожного відрізка
-ax.plot_surface(X_BF, Y_BF, Z_BF, **surf_kwargs)
-ax.plot_surface(X_FD, Y_FD, Z_FD, **surf_kwargs)
-ax.plot_surface(X_DC, Y_DC, Z_DC, **surf_kwargs)
-ax.plot_surface(X_CE, Y_CE, Z_CE, **surf_kwargs)
-ax.plot_surface(X_EA, Y_EA, Z_EA, **surf_kwargs)
+# Виведення символьних рівнянь
+print("Параметричне рівняння ламаної:")
+print("x(u) =")
+sp.pprint(x_expr)
+print("\ny(u) =")
+sp.pprint(y_expr)
 
-# Малюємо вісь обертання (від A до B) червоним кольором
-ax.plot([A[0], B[0]], [A[1], B[1]], [0, 0], color='red', linewidth=4, label='Вісь обертання')
+print("\nПараметричне рівняння поверхні обертання (навколо осі OX):")
+print("X(u, v) =")
+sp.pprint(X_expr)
+print("\nY(u, v) =")
+sp.pprint(Y_expr)
+print("\nZ(u, v) =")
+sp.pprint(Z_expr)
 
-# Налаштовуємо підписи осей та масштабування
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-ax.set_box_aspect((1, 1, 1))
-ax.view_init(elev=30, azim=120)  # elev — кут підйому, azim — азимутальний кут
-plt.title("Обертання фігури навколо нижньої основи (червона лінія)")
-ax.legend()
+# Створюємо числові функції для візуалізації
+f_x = sp.lambdify(t, x_expr, 'numpy')
+f_y = sp.lambdify(t, y_expr, 'numpy')
+f_X = sp.lambdify((t, v), X_expr, 'numpy')
+f_Y = sp.lambdify((t, v), Y_expr, 'numpy')
+f_Z = sp.lambdify((t, v), Z_expr, 'numpy')
+
+# Побудова 2D-графіку ламаної за допомогою Matplotlib
+t_num = np.linspace(t_vals_sym[0], t_vals_sym[-1], 300)
+x_num = f_x(t_num)
+y_num = f_y(t_num)
+
+plt.figure(figsize=(6, 4))
+plt.plot(x_num, y_num, 'b-', label='Ламана')
+# Позначення вершин червоними точками
+vertices_x = [pt[0] for pt in vertices]
+vertices_y = [pt[1] for pt in vertices]
+plt.scatter(vertices_x, vertices_y, color='red', zorder=5)
+plt.title("Ламана в площині XY")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.legend()
+plt.grid(True)
+plt.axis('equal')
 plt.show()
+
+# Створення сітки параметрів для побудови поверхні
+t_vals = np.linspace(t_vals_sym[0], t_vals_sym[-1], 100)
+v_vals = np.linspace(0, 2 * np.pi, 100)
+T, V = np.meshgrid(t_vals, v_vals)
+X_vals = f_X(T, V)
+Y_vals = f_Y(T, V)
+Z_vals = f_Z(T, V)
+
+# Для PyVista створимо StructuredGrid.
+# Зауважте, що np.meshgrid повертає масиви форми (n_v, n_t).
+# Ми встановлюємо dims = (n_t, n_v, 1) і трансформуємо точки у Fortran-порядку.
+nt = len(t_vals)
+nv = len(v_vals)
+points = np.column_stack([
+    X_vals.T.ravel(order='F'),
+    Y_vals.T.ravel(order='F'),
+    Z_vals.T.ravel(order='F')
+])
+grid = pv.StructuredGrid()
+grid.points = points
+grid.dimensions = (nt, nv, 1)
+
+# Генеруюча ламана: значення при v = 0 (тобто Z = 0)
+t_line = np.linspace(t_vals_sym[0], t_vals_sym[-1], 300)
+x_line = f_x(t_line)
+y_line = f_y(t_line)
+z_line = np.zeros_like(t_line)
+curve_points = np.column_stack([x_line, y_line, z_line])
+n_line = len(t_line)
+# Формуємо масив з'єднувальних індексів для ламаної:
+lines = np.hstack(([n_line], np.arange(n_line)))
+polyline = pv.PolyData()
+polyline.points = curve_points
+polyline.lines = lines
+
+# Створення першої PyVista-сцени з першим кутом огляду (наприклад, azimuth=45, elevation=30)
+p1 = pv.Plotter(window_size=(800, 600))
+p1.add_mesh(grid, opacity=0.8, cmap='viridis', show_scalar_bar=False)
+p1.add_mesh(polyline, color='red', line_width=5)
+p1.add_text("Поверхня обертання (вигляд 1)", position='upper_edge', font_size=14, shadow=True)
+# Налаштування камери вручну
+p1.camera_position = [(np.max(X_vals), np.max(Y_vals), np.max(Z_vals)),
+                      (np.mean(X_vals), np.mean(Y_vals), np.mean(Z_vals)),
+                      (0, 0, 1)]
+p1.camera.azimuth = 45
+p1.camera.elevation = 30
+p1.show()
 
 # =====================================================
 # Завдання 3.2.
