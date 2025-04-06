@@ -166,47 +166,105 @@ def resample_polyline(points, num_points=300):
     return x_interp, y_interp
 
 
-# Дані завдання 2.6.1: вершини ламаної
+# =====================================================
+# Завдання 3.2.
+# =====================================================
+print("Завдання 3.2. Поверхня перенесення ламаної кривої")
+
 points_polyline = [(-1, 0), (-3, 0), (0, 2), (3, 0), (1, 0), (1, -2), (-1, -2), (-1, 0)]
 
-# Отримаємо більше точок, що описують ламану
-x_curve, y_curve = resample_polyline(points_polyline, num_points=300)
+# Отримуємо символьні вирази для x(u) та y(u)
+x_expr, y_expr, u_vals_sym = build_polyline_expr(points_polyline, sym=u)
 
-# Вибираємо довжину перенесення (екструзії) – напр., L = 3
-L = 10
-s = np.linspace(0, L, 5)
+# Поверхня перенесення (екструзії): переносимо криву вздовж осі Z (перпендикулярно площині ламаної)
+# Параметричні рівняння поверхні:
+#   X(u, v) = x(u)
+#   Y(u, v) = y(u)
+#   Z(u, v) = v
+X_expr = x_expr
+Y_expr = y_expr
+Z_expr = v
 
-# Створюємо сітку для параметрів:
-# t – параметр уздовж ламаної (взятий за індекс точок), s – параметр перенесення
-X_surface = np.tile(x_curve, (len(s), 1))
-Y_surface = np.tile(y_curve, (len(s), 1))
-Z_surface = np.tile(s[:, np.newaxis], (1, len(x_curve)))
+# Надрукуємо символьні рівняння
+print("Параметричне рівняння ламаної:")
+print("x(u) =")
+sp.pprint(x_expr)
+print("\ny(u) =")
+sp.pprint(y_expr)
 
-# Візуалізація:
-fig = plt.figure(figsize=(10, 8))
-ax = fig.add_subplot(111, projection='3d')
+print("\nПараметричне рівняння поверхні перенесення:")
+print("X(u, v) =")
+sp.pprint(X_expr)
+print("\nY(u, v) =")
+sp.pprint(Y_expr)
+print("\nZ(u, v) =")
+sp.pprint(Z_expr)
 
-# Малюємо отриману поверхню перенесення
-surf = ax.plot_surface(X_surface, Y_surface, Z_surface, cmap='plasma', alpha=0.8, edgecolor='none')
+# Створюємо числові функції для обчислень
+f_x = sp.lambdify(u, x_expr, 'numpy')
+f_y = sp.lambdify(u, y_expr, 'numpy')
+f_X = sp.lambdify((u, v), X_expr, 'numpy')
+f_Y = sp.lambdify((u, v), Y_expr, 'numpy')
+f_Z = sp.lambdify((u, v), Z_expr, 'numpy')
 
-# Малюємо початкову ламану криву (в площині z=0)
-ax.plot(x_curve, y_curve, np.zeros_like(x_curve), 'k-', linewidth=1, label='Ламана крива')
+u_num = np.linspace(u_vals_sym[0], u_vals_sym[-1], 300)
+x_num = f_x(u_num)
+y_num = f_y(u_num)
 
-# Налаштовуємо підписи осей та заголовок
-ax.set_xlabel('X')
-ax.set_ylabel('Y')
-ax.set_zlabel('Z')
-ax.set_title('Поверхня перенесення ламаної кривої (екструзія вздовж осі Z)')
-ax.legend()
+plt.figure(figsize=(6, 4))
+plt.plot(x_num, y_num, 'b-', label='Ламана')
+# Позначення вершин червоними точками
+vertices_x = [pt[0] for pt in points_polyline]
+vertices_y = [pt[1] for pt in points_polyline]
+plt.scatter(vertices_x, vertices_y, color='red', zorder=5)
+plt.title("Ламана в площині XY")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.legend()
+plt.grid(True)
+plt.axis('equal')
 plt.show()
 
-# Друкуємо параметричні рівняння
-print("Параметричні рівняння поверхні перенесення:")
-print("x = x(t), де x(t) задається інтерполяцією точки ламаної:")
-print(points_polyline)
-print("y = y(t)")
-print("z = s, де s ∈ [0, {:.1f}]".format(L))
+# Обираємо параметричний інтервал для u (як для ламаної) та для v (довжина екструзії)
+u_vals = np.linspace(u_vals_sym[0], u_vals_sym[-1], 100)
+v_vals = np.linspace(-2, 2, 50)  # перенесення вздовж Z від -2 до 2
+U, V = np.meshgrid(u_vals, v_vals)
+X_vals = f_X(U, V)
+Y_vals = f_Y(U, V)
+Z_vals = f_Z(U, V)
 
+# Масиви U, V мають форму (n_v, n_u) – встановлюємо розміри як (n_u, n_v, 1)
+n_u = len(u_vals)
+n_v = len(v_vals)
+points = np.column_stack([
+    X_vals.T.ravel(order='F'),
+    Y_vals.T.ravel(order='F'),
+    Z_vals.T.ravel(order='F')
+])
+grid = pv.StructuredGrid()
+grid.points = points
+grid.dimensions = (n_u, n_v, 1)
+
+# Створимо також генеруючу криву (при v = 0) як PolyData для порівняння:
+u_line = np.linspace(u_vals_sym[0], u_vals_sym[-1], 300)
+x_line = f_x(u_line)
+y_line = f_y(u_line)
+z_line = np.zeros_like(u_line)
+curve_points = np.column_stack([x_line, y_line, z_line])
+n_line = len(u_line)
+# Створюємо масив з'єднувальних індексів для ламаної
+lines = np.hstack(([n_line], np.arange(n_line)))
+polyline = pv.PolyData()
+polyline.points = curve_points
+polyline.lines = lines
+
+# Візуалізація за допомогою PyVista
+plotter = pv.Plotter(window_size=(800, 600))
+plotter.add_mesh(grid, opacity=0.8, cmap='viridis', show_scalar_bar=False)
+plotter.add_mesh(polyline, color='red', line_width=5)
+plotter.add_text("Поверхня перенесення", font_size=14)
+plotter.camera_position = 'xy'
+plotter.show()
 # =====================================================
 # Завдання 3.3.1 Обмежена лінійчата поверхня
 # Побудова параметричних рівнянь зони трикутника A, B, C
@@ -620,97 +678,105 @@ print("Завдання 3.4 Параметричні рівняння повер
 # БАЗА (у площині XY, z=0): трикутник (-1,0), (0,1), (1,0).
 # ПРОФІЛЬ: ламана  (0,1), (0.75,0.75), (0.75,0.25),(0,0).
 # =====================================================
-import numpy as np
-import matplotlib.pyplot as plt
-import sympy as sp
+print("Завдання 3.4. Параметричні рівняння поверхні подібних поперечних перерізів")
+# Задаємо список вершин ламаної.
+# Наприклад, остання точка (0,0) закриває ламану.
+vertices = [(0, 1), (0.75, 0.75), (0.75, 0.25), (0, 0), (0, 1)]
 
+# Отримуємо символьні вирази для x(t) та y(t)
+x_expr, y_expr, t_vals_sym = build_polyline_expr(vertices)
 
-def bernstein_polyline_symbolic(X, Y):
-    """
-    Обчислює символічний вираз p(x) за формулою Бернштейна для ламаної,
-    заданої контрольними точками (X[i], Y[i]), i = 0,1,...,n.
+# Будуємо параметричне рівняння поверхні обертання навколо осі OX:
+# X(u, v) = x(u), Y(u, v) = y(u)*cos(v), Z(u, v) = y(u)*sin(v)
+X_expr = x_expr
+Y_expr = y_expr * sp.cos(v)
+Z_expr = y_expr * sp.sin(v)
 
-    Якщо задано лише 2 точки (n=1), повертається звичайна лінійна інтерполяція.
+# Виведення символьних рівнянь
+print("Параметричне рівняння ламаної:")
+print("x(u) =")
+sp.pprint(x_expr)
+print("\ny(u) =")
+sp.pprint(y_expr)
 
-    Формула:
+print("\nПараметричне рівняння поверхні обертання (навколо осі OX):")
+print("X(u, v) =")
+sp.pprint(X_expr)
+print("\nY(u, v) =")
+sp.pprint(Y_expr)
+print("\nZ(u, v) =")
+sp.pprint(Z_expr)
 
-      p(x) = 1/2 * [
-           y0 + (y1-y0)/(x1-x0) * (x - x0)
-         + y_{n-1} + (y_n-y_{n-1})/(x_n-x_{n-1}) * (x - x_{n-1})
-         + Σ_{k=1}^{n-1} { ( (y_{k+1}-y_k)/(x_{k+1}-x_k) - (y_k-y_{k-1})/(x_k-x_{k-1}) ) * |x - x_k| }
-      ]
+# Створюємо числові функції для візуалізації
+f_x = sp.lambdify(t, x_expr, 'numpy')
+f_y = sp.lambdify(t, y_expr, 'numpy')
+f_X = sp.lambdify((t, v), X_expr, 'numpy')
+f_Y = sp.lambdify((t, v), Y_expr, 'numpy')
+f_Z = sp.lambdify((t, v), Z_expr, 'numpy')
 
-    Аргументи:
-      X : список або масив контрольних x-координат (довжина n+1)
-      Y : список або масив контрольних y-координат (довжина n+1)
+# Побудова 2D-графіку ламаної за допомогою Matplotlib
+t_num = np.linspace(t_vals_sym[0], t_vals_sym[-1], 300)
+x_num = f_x(t_num)
+y_num = f_y(t_num)
 
-    Повертає:
-      Символьний вираз p(x) (Sympy expression).
-    """
-    # Символьна змінна x
-    x = sp.symbols('x')
-
-    n = len(X) - 1  # якщо n=1 => 2 точки
-    if n == 1:
-        expr = Y[0] + (Y[1] - Y[0]) / (X[1] - X[0]) * (x - X[0])
-        return sp.simplify(expr)
-
-    # Обчислюємо внесок крайових (лівий та правий)
-    term_left = Y[0] + (Y[1] - Y[0]) / (X[1] - X[0]) * (x - X[0])
-    term_right = Y[n - 1] + (Y[n] - Y[n - 1]) / (X[n] - X[n - 1]) * (x - X[n - 1])
-
-    # Обчислюємо суму по внутрішнім вузлам k = 1,2,..., n-1
-    sum_internal = 0
-    for k in range(1, n):
-        slope_plus = (Y[k + 1] - Y[k]) / (X[k + 1] - X[k])
-        slope_minus = (Y[k] - Y[k - 1]) / (X[k] - X[k - 1])
-        sum_internal += (slope_plus - slope_minus) * sp.Abs(x - X[k])
-
-    expr = sp.Rational(1, 2) * (term_left + term_right + sum_internal)
-    expr = sp.simplify(expr)
-    return expr
-
-
-# =============================================================================
-# Приклад використання.
-# Контрольні точки можуть бути будь-якої кількості, наприклад:
-# X = [1,2,3,4,5] та Y = [1,1,62,123,1]
-# =============================================================================
-# Задаємо контрольні точки
-X = [-1, 0, 1]
-Y = [0, 1, 0]
-
-# Отримуємо символічний вираз p(x)
-p_expr = bernstein_polyline_symbolic(X, Y)
-
-# Виводимо отриману формулу
-print("Символічна формула p(x) для заданих контрольних точок:")
-sp.pretty_print(p_expr)
-
-# Перетворюємо символічний вираз у чисельну функцію для обчислення
-p_func = sp.lambdify(sp.symbols('x'), p_expr, 'numpy')
-
-# Створюємо щільну сітку значень x (тобто безперервну функцію)
-x_vals = np.linspace(X[0], X[-1], 500)
-y_vals = p_func(x_vals)
-
-# Побудова графіка (у 3D; оскільки крива лежить у площині XY, використаємо z=0)
-fig = plt.figure(figsize=(10, 6))
-ax = fig.add_subplot(111, projection='3d')
-ax.plot(x_vals, y_vals, np.zeros_like(x_vals), label="Bernstein Polyline", lw=2, color='blue')
-ax.scatter(X, Y, np.zeros_like(X), color='red', s=50, label="Контрольні точки")
-ax.set_title("Bernstein Polyline Interpolation")
-ax.set_xlabel("x")
-ax.set_ylabel("y")
-ax.set_zlabel("z")
-ax.legend()
-
-# Масштабування осей
-max_range = max(np.ptp(x_vals), np.ptp(y_vals)) / 2
-mid_x = 0.5 * (x_vals.min() + x_vals.max())
-mid_y = 0.5 * (y_vals.min() + y_vals.max())
-ax.set_xlim(mid_x - max_range, mid_x + max_range)
-ax.set_ylim(mid_y - max_range, mid_y + max_range)
-ax.set_zlim(-0.5, 0.5)
-
+plt.figure(figsize=(6, 4))
+plt.plot(x_num, y_num, 'b-', label='Ламана')
+# Позначення вершин червоними точками
+vertices_x = [pt[0] for pt in vertices]
+vertices_y = [pt[1] for pt in vertices]
+plt.scatter(vertices_x, vertices_y, color='red', zorder=5)
+plt.title("Ламана в площині XY")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.legend()
+plt.grid(True)
+plt.axis('equal')
 plt.show()
+
+# Створення сітки параметрів для побудови поверхні
+t_vals = np.linspace(t_vals_sym[0], t_vals_sym[-1], 100)
+v_vals = np.linspace(0, 2 * np.pi, 100)
+T, V = np.meshgrid(t_vals, v_vals)
+X_vals = f_X(T, V)
+Y_vals = f_Y(T, V)
+Z_vals = f_Z(T, V)
+
+# Для PyVista створимо StructuredGrid.
+# Зауважте, що np.meshgrid повертає масиви форми (n_v, n_t).
+# Ми встановлюємо dims = (n_t, n_v, 1) і трансформуємо точки у Fortran-порядку.
+nt = len(t_vals)
+nv = len(v_vals)
+points = np.column_stack([
+    X_vals.T.ravel(order='F'),
+    Y_vals.T.ravel(order='F'),
+    Z_vals.T.ravel(order='F')
+])
+grid = pv.StructuredGrid()
+grid.points = points
+grid.dimensions = (nt, nv, 1)
+
+# Генеруюча ламана: значення при v = 0 (тобто Z = 0)
+t_line = np.linspace(t_vals_sym[0], t_vals_sym[-1], 300)
+x_line = f_x(t_line)
+y_line = f_y(t_line)
+z_line = np.zeros_like(t_line)
+curve_points = np.column_stack([x_line, y_line, z_line])
+n_line = len(t_line)
+# Формуємо масив з'єднувальних індексів для ламаної:
+lines = np.hstack(([n_line], np.arange(n_line)))
+polyline = pv.PolyData()
+polyline.points = curve_points
+polyline.lines = lines
+
+# Створення першої PyVista-сцени з першим кутом огляду (наприклад, azimuth=45, elevation=30)
+p1 = pv.Plotter(window_size=(800, 600))
+p1.add_mesh(grid, opacity=0.8, cmap='viridis', show_scalar_bar=False)
+p1.add_mesh(polyline, color='red', line_width=5)
+p1.add_text("Поверхня обертання (вигляд 1)", position='upper_edge', font_size=14, shadow=True)
+# Налаштування камери вручну
+p1.camera_position = [(np.max(X_vals), np.max(Y_vals), np.max(Z_vals)),
+                      (np.mean(X_vals), np.mean(Y_vals), np.mean(Z_vals)),
+                      (0, 0, 1)]
+p1.camera.azimuth = 45
+p1.camera.elevation = 30
+p1.show()
