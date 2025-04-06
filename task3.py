@@ -8,17 +8,17 @@ import matplotlib.pyplot as plt
 import pyvista as pv
 
 # Оголошення символьних змінних
-t, u, v = sp.symbols('t u v', real=True)
+x, t, u, v = sp.symbols('x t u v', real=True)
 
 
 # Функція P(t, a, w) для інтерполяції ламаної:
 # P(t, a, w) = 1/(2w) * (w + |t - a| - |t - a - w|)
-def P(a, w):
-    return (1 / (2 * w)) * (w + sp.Abs(t - a) - sp.Abs(t - a - w))
+def P(a, w, sym=t):
+    return (1 / (2 * w)) * (w + sp.Abs(sym - a) - sp.Abs(sym - a - w))
 
 
 # Функція для побудови символьних виразів ламаної для довільної кількості вершин
-def build_polyline_expr(vertices, t_values=None):
+def build_polyline_expr(vertices, t_values=None, sym=t):
     n = len(vertices)
     # Якщо значення параметра не задані – рівномірний розподіл: 0, 1, 2, ..., n-1
     if t_values is None:
@@ -34,8 +34,8 @@ def build_polyline_expr(vertices, t_values=None):
         dt = t_values[i] - t_values[i - 1]
         dx = vertices[i][0] - vertices[i - 1][0]
         dy = vertices[i][1] - vertices[i - 1][1]
-        x_expr += dx * P(t_values[i - 1], dt)
-        y_expr += dy * P(t_values[i - 1], dt)
+        x_expr += dx * P(t_values[i - 1], dt, sym=sym)
+        y_expr += dy * P(t_values[i - 1], dt, sym=sym)
     return sp.simplify(x_expr), sp.simplify(y_expr), t_values
 
 
@@ -214,218 +214,304 @@ print("z = s, де s ∈ [0, {:.1f}]".format(L))
 # =====================================================
 print("Завдання 3.3.1 Обмежена лінійчата поверхня")
 
-# Задаємо координати вершин трикутника (A, B, C)
-A = np.array([3, 3, -1])
-B = np.array([5, 5, -2])
-C = np.array([4, 1, 1])
 
-# -----------------------------------------------------------------
-# Параметричне рівняння зони трикутника:
-# P(u, v) = (1 - u - v)*A + u*B + v*C, де 0 ≤ u ≤ 1, 0 ≤ v ≤ 1 та u + v ≤ 1.
-#
-# Покоординатно:
-#   x(u, v) = A_x*(1 - u - v) + B_x*u + C_x*v,
-#   y(u, v) = A_y*(1 - u - v) + B_y*u + C_y*v,
-#   z(u, v) = A_z*(1 - u - v) + B_z*u + C_z*v.
-# -----------------------------------------------------------------
-print("Параметричне рівняння зони трикутника:")
-print("x(u,v) = {}*(1 - u - v) + {}*u + {}*v".format(A[0], B[0], C[0]))
-print("y(u,v) = {}*(1 - u - v) + {}*u + {}*v".format(A[1], B[1], C[1]))
-print("z(u,v) = {}*(1 - u - v) + {}*u + {}*v".format(A[2], B[2], C[2]))
-print("де 0 ≤ u, v та u + v ≤ 1")
+# Допоміжна функція для побудови символьних виразів кусочно-лінійної інтерполяції для множини точок
+def build_polyline_expr_nd(vertices, t_values=None, sym=t):
+    n = len(vertices)
+    d = len(vertices[0])  # вимірність (наприклад, 3 для 3D)
+    if t_values is None:
+        t_values = list(range(n))
+    if len(t_values) != n:
+        raise ValueError("Кількість значень параметра має дорівнювати кількості вершин.")
+    # Початкові вирази для кожної координати
+    exprs = [sp.sympify(vertices[0][j]) for j in range(d)]
+    # Кусочно-лінійна інтерполяція між точками
+    for i in range(1, n):
+        dt = t_values[i] - t_values[i - 1]
+        for j in range(d):
+            d_coord = vertices[i][j] - vertices[i - 1][j]
+            exprs[j] += d_coord * P(t_values[i - 1], dt, sym=sym)
+    exprs = [sp.simplify(e) for e in exprs]
+    return exprs, t_values
 
-# -----------------------------------------------------------------
-# Параметричні рівняння ламаної (контур трикутника)
-# Розглянемо три сегменти:
-# 1) Сегмент AB (від A до B):
-#       x(t) = A_x + (B_x - A_x)*t,
-#       y(t) = A_y + (B_y - A_y)*t,
-#       z(t) = A_z + (B_z - A_z)*t,  де 0 ≤ t ≤ 1.
-#
-# 2) Сегмент BC (від B до C):
-#       x(t) = B_x + (C_x - B_x)*t,
-#       y(t) = B_y + (C_y - B_y)*t,
-#       z(t) = B_z + (C_z - B_z)*t,  де 0 ≤ t ≤ 1.
-#
-# 3) Сегмент CA (від C до A):
-#       x(t) = C_x + (A_x - C_x)*t,
-#       y(t) = C_y + (A_y - C_y)*t,
-#       z(t) = C_z + (A_z - C_z)*t,  де 0 ≤ t ≤ 1.
-# -----------------------------------------------------------------
-print("\nПараметричні рівняння ламаної (контур трикутника):")
 
-print("\nСегмент AB (від A до B):")
-print("x(t) = {} + {}*t".format(A[0], B[0] - A[0]))
-print("y(t) = {} + {}*t".format(A[1], B[1] - A[1]))
-print("z(t) = {} + {}*t".format(A[2], B[2] - A[2]))
-print("де 0 ≤ t ≤ 1")
+def build_ruled_surface_equation(points):
+    """
+    Будує параметричні рівняння лінійчатої поверхні для довільного набору точок.
+    Припускаємо, що точки лежать в одній площині та утворюють опуклий багатокутник.
 
-print("\nСегмент BC (від B до C):")
-print("x(t) = {} + {}*t".format(B[0], C[0] - B[0]))
-print("y(t) = {} + {}*t".format(B[1], C[1] - B[1]))
-print("z(t) = {} + {}*t".format(B[2], C[2] - B[2]))
-print("де 0 ≤ t ≤ 1")
+    Алгоритм:
+      1. Обчислення центроїда.
+      2. Сортування точок за зростанням кута відносно центроїда з використанням нормалі (за першими 3 точками).
+      3. Визначення індексу розбиття i_split = n // 2.
+         - Крива 0: точки від 0 до i_split (за порядком).
+         - Крива 1: точки від 0 до i_split, але іншим шляхом (від останньої точки до i_split, зі збереженням першої точки).
+      4. Побудова кусочно-лінійної інтерполяції для кожної кривої.
+      5. Побудова поверхні через r(u,v) = (1-v)*r0(u) + v*r1(u), де u,v ∈ [0,1].
 
-print("\nСегмент CA (від C до A):")
-print("x(t) = {} + {}*t".format(C[0], A[0] - C[0]))
-print("y(t) = {} + {}*t".format(C[1], A[1] - C[1]))
-print("z(t) = {} + {}*t".format(C[2], A[2] - C[2]))
-print("де 0 ≤ t ≤ 1")
+    Повертає кортеж символьних виразів (x(u,v), y(u,v), z(u,v)).
+    """
+    # Перетворення точок у символьні вектори
+    pts = [sp.Matrix(pt) for pt in (points.tolist() if isinstance(points, np.ndarray) else points)]
+    n = len(pts)
+    if n < 2:
+        raise ValueError("Потрібно принаймні 2 точки для побудови поверхні!")
 
-# -----------------------------------------------------------------
-# Побудова області трикутника за допомогою сітки параметрів
-# -----------------------------------------------------------------
-n = 50  # Кількість точок для сітки
-u = np.linspace(0, 1, n)
-v = np.linspace(0, 1, n)
-U, V = np.meshgrid(u, v)
+    # Обчислення центроїда
+    centroid = sum(pts, sp.Matrix([0, 0, 0])) / n
 
-# Використовуємо маску, щоб залишити точки, де u + v ≤ 1
-mask = (U + V) <= 1
-U_valid = U[mask]
-V_valid = V[mask]
+    # Обчислення нормалі площини (якщо є хоча б 3 точки)
+    if n >= 3:
+        normal = (pts[1] - pts[0]).cross(pts[2] - pts[0])
+        normal = normal / normal.norm()
+    else:
+        normal = sp.Matrix([0, 0, 1])
 
-# Обчислення координат точок області трикутника
-X = (1 - U_valid - V_valid) * A[0] + U_valid * B[0] + V_valid * C[0]
-Y = (1 - U_valid - V_valid) * A[1] + U_valid * B[1] + V_valid * C[1]
-Z = (1 - U_valid - V_valid) * A[2] + U_valid * B[2] + V_valid * C[2]
+    # Опорний вектор: від центроїда до першої точки
+    ref = pts[0] - centroid
 
-# -----------------------------------------------------------------
-# Побудова 3D-графіка
-# -----------------------------------------------------------------
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+    # Функція для обчислення кута точки відносно ref та центроїда
+    def angle(pt):
+        v_vec = pt - centroid
+        return sp.atan2(ref.cross(v_vec).dot(normal), ref.dot(v_vec))
 
-# Побудова зафарбованої області трикутника
-ax.plot_trisurf(X, Y, Z, color='cyan', alpha=0.5, edgecolor='gray')
+    # Сортування точок за кутом
+    pts_sorted = sorted(pts, key=angle)
 
-# Побудова ламаної (контур трикутника) за порядком вершин A -> B -> C -> A
-triangle_x = [A[0], B[0], C[0], A[0]]
-triangle_y = [A[1], B[1], C[1], A[1]]
-triangle_z = [A[2], B[2], C[2], A[2]]
-ax.plot(triangle_x, triangle_y, triangle_z, color='black', linewidth=2)
+    # Визначення індексу розбиття (діагоналі)
+    i_split = n // 2
+    # Перша крива: від першої точки до точки з індексом i_split
+    curve0 = pts_sorted[:i_split + 1]
+    # Друга крива: від першої точки до точки i_split іншою дугою (від останньої до i_split)
+    curve1 = [pts_sorted[0]] + pts_sorted[-1:i_split:-1]
+    # Переконуємося, що останньою точкою другої кривої є pts_sorted[i_split]
+    if curve1[-1] != pts_sorted[i_split]:
+        curve1.append(pts_sorted[i_split])
 
-# Налаштування підписів осей та заголовку графіка
-ax.set_title("Трикутна область та її контур")
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
+    # Перетворення кривих у список координат (для роботи з build_polyline_expr_nd)
+    curve0_list = [list(pt) for pt in curve0]
+    curve1_list = [list(pt) for pt in curve1]
 
-plt.show()
+    # Побудова кусочно-лінійної інтерполяції для кожної кривої
+    exprs0, t_vals0 = build_polyline_expr_nd(curve0_list, sym=t)
+    exprs1, t_vals1 = build_polyline_expr_nd(curve1_list, sym=t)
+
+    # Нормування параметра: підставляємо t = u*(m-1) так, що u ∈ [0,1]
+    m0 = len(curve0_list)
+    m1 = len(curve1_list)
+    exprs0_u = [sp.simplify(e.subs(t, u * (m0 - 1))) for e in exprs0]
+    exprs1_u = [sp.simplify(e.subs(t, u * (m1 - 1))) for e in exprs1]
+
+    # Побудова параметричних рівнянь поверхні:
+    # r(u,v) = (1-v)*r0(u) + v*r1(u)
+    x_zone = sp.simplify(exprs0_u[0] * (1 - v) + exprs1_u[0] * v)
+    y_zone = sp.simplify(exprs0_u[1] * (1 - v) + exprs1_u[1] * v)
+    z_zone = sp.simplify(exprs0_u[2] * (1 - v) + exprs1_u[2] * v)
+
+    print("Параметричні рівняння лінійчатої поверхні:")
+    print("x(u,v) =")
+    sp.pprint(x_zone)
+    print("\ny(u,v) =")
+    sp.pprint(y_zone)
+    print("\nz(u,v) =")
+    sp.pprint(z_zone)
+    print("\nДомен: 0 ≤ u ≤ 1, 0 ≤ v ≤ 1")
+
+    return x_zone, y_zone, z_zone
+
+
+points = np.array([
+    [3, 3, -1],
+    [5, 5, -2],
+    [4, 1, 1]
+])
+
+print("Координати вершин після обробки (для ruled surface):")
+print(points)
+
+x_zone, y_zone, z_zone = build_ruled_surface_equation(points)
+
+# 2. Обчислення параметричних рівнянь контуру трикутника
+# Для замикання контуру додаємо першу вершину в кінець списку
+vertices_contour = np.vstack([points, points[0]])
+exprs_contour, t_vals = build_polyline_expr_nd(vertices_contour)
+print("Параметричні рівняння контуру трикутника (параметр t):")
+
+print("x(t) =")
+sp.pprint(exprs_contour[0])
+print("y(t) =")
+sp.pprint(exprs_contour[1])
+print("z(t) =")
+sp.pprint(exprs_contour[2])
+print("Домен t від", t_vals[0], "до", t_vals[-1])
+print()
+# Створення сітки параметричних значень для u та v
+n_u, n_v = 300, 300  # можна змінити кількість кроків для більшої/меншої щільності сітки
+u_vals = np.linspace(0, 1, n_u, endpoint=True)
+v_vals = np.linspace(0, 1, n_v, endpoint=True)
+U, V = np.meshgrid(u_vals, v_vals, indexing='ij')
+
+# Створення числових функцій із символьних рівнянь зони
+f_x_zone = sp.lambdify((u, v), x_zone, "numpy")
+f_y_zone = sp.lambdify((u, v), y_zone, "numpy")
+f_z_zone = sp.lambdify((u, v), z_zone, "numpy")
+# Обчислення координат поверхні для кожної пари (u,v)
+X = f_x_zone(U, V)
+Y = f_y_zone(U, V)
+Z = f_z_zone(U, V)
+# Формуємо масив точок для структурованої сітки PyVista
+grid_points = np.stack((X, Y, Z), axis=-1)  # розмірність (n_u, n_v, 3)
+surface_grid = pv.StructuredGrid()
+surface_grid.points = grid_points.reshape(-1, 3)
+surface_grid.dimensions = [n_u, n_v, 1]  # третя розмірність = 1, оскільки сітка двовимірна
+
+# Перетворення символьних виразів контуру у числові функції
+f_x = sp.lambdify(t, exprs_contour[0], "numpy")
+f_y = sp.lambdify(t, exprs_contour[1], "numpy")
+f_z = sp.lambdify(t, exprs_contour[2], "numpy")
+t_samples = np.linspace(t_vals[0], t_vals[-1], 2000, endpoint=True)
+x_samples = f_x(t_samples)
+y_samples = f_y(t_samples)
+z_samples = f_z(t_samples)
+
+# 3. Візуалізація з PyVista
+plotter = pv.Plotter()
+
+# Додавання ламаної (контур) трикутника
+points_line = np.column_stack((x_samples, y_samples, z_samples))
+# Припустимо, що points_line – це масив точок розмірності (N, 3)
+n_points = points_line.shape[0]
+# Створюємо масив з комірками: перший елемент – кількість точок у полі, далі індекси точок.
+cells = np.hstack([[n_points], np.arange(n_points)])
+# Створюємо об'єкт PolyData для лінії
+line = pv.PolyData()
+line.points = points_line
+line.lines = cells
+
+plotter.add_mesh(line, color="black", line_width=3)
+
+# Додавання побудованої поверхні (зони) на той же графік
+plotter.add_mesh(surface_grid, color="green", opacity=0.6, show_edges=True, line_width=1)
+
+# Додаємо лейбли для вершин
+labels = ["A", "B", "C"]
+plotter.add_point_labels(points, labels, font_size=20, point_color="red", point_size=10)
+
+# 1) Можна залишити маленький орієнтаційний віджет у кутку
+plotter.show_axes()  # показує маленький 3D-компас у кутку
+
+# 2) Додати «bounding box» з поділками
+plotter.show_bounds(
+    grid='front',  # показує сітку «спереду»
+    location='outer',  # розміщує осі по зовнішніх межах
+    show_xaxis=True,
+    show_yaxis=True,
+    show_zaxis=True,
+    xtitle='X',
+    ytitle='Y',
+    ztitle='Z'
+)
+# Показуємо сцену
+plotter.show()
 # =====================================================
 # Завдання 3.3.2. Обмежена лінійчата поверхня для паралелограма
 # Знаходження четвертої вершини D (протилежної A) для паралелограма з вершинами A, B, C
 # та побудова параметричних рівнянь області і контуру паралелограма.
 # =====================================================
 print("Завдання 3.3.2. Обмежена лінійчата поверхня для паралелограма")
-# Обчислення координат четвертої вершини D (протилежної A)
-# Формула: D = B + C - A
-D = B + C - A
-print("Координати вершини D:", D)
 # Обчислення координат четвертої вершини D (протилежної A) за формулою: D = B + C - A
-D = B + C - A
-print("Координати вершини D:", D)
+points = np.array([
+    [3, 3, -1],  # A
+    [4, 1, 1],  # C
+    [5 + 4 - 3, 5 + 1 - 3, -2 + 1 - (-1)],  # D = B + C - A
+    [5, 5, -2]  # B
+])
+print(f"Координати вершини D: {points[2]}")
+x_zone, y_zone, z_zone = build_ruled_surface_equation(points)
 
-# -----------------------------------------------------------------
-# Параметричне рівняння області паралелограма:
-# P(u, v) = A + u*(B - A) + v*(C - A), де 0 ≤ u ≤ 1 та 0 ≤ v ≤ 1.
-#
-# Покоординатно:
-#   x(u, v) = A_x + (B_x - A_x)*u + (C_x - A_x)*v,
-#   y(u, v) = A_y + (B_y - A_y)*u + (C_y - A_y)*v,
-#   z(u, v) = A_z + (B_z - A_z)*u + (C_z - A_z)*v.
-# -----------------------------------------------------------------
-print("\nПараметричне рівняння області паралелограма:")
-print("x(u, v) = {} + {}*u + {}*v".format(A[0], B[0] - A[0], C[0] - A[0]))
-print("y(u, v) = {} + {}*u + {}*v".format(A[1], B[1] - A[1], C[1] - A[1]))
-print("z(u, v) = {} + {}*u + {}*v".format(A[2], B[2] - A[2], C[2] - A[2]))
-print("де 0 ≤ u ≤ 1 та 0 ≤ v ≤ 1")
+# 2. Обчислення параметричних рівнянь контуру трикутника
+# Для замикання контуру додаємо першу вершину в кінець списку
+vertices_contour = np.vstack([points, points[0]])
+exprs_contour, t_vals = build_polyline_expr_nd(vertices_contour)
+print("Параметричні рівняння контуру трикутника (параметр t):")
 
-# -----------------------------------------------------------------
-# Параметричне рівняння ламаної (контур паралелограма)
-# Сегменти ламаної:
-# 1) Сегмент AB: від A до B:
-#       x(t) = A_x + (B_x - A_x)*t,
-#       y(t) = A_y + (B_y - A_y)*t,
-#       z(t) = A_z + (B_z - A_z)*t,   де 0 ≤ t ≤ 1.
-#
-# 2) Сегмент BD: від B до D:
-#       x(t) = B_x + (D_x - B_x)*t,
-#       y(t) = B_y + (D_y - B_y)*t,
-#       z(t) = B_z + (D_z - B_z)*t,   де 0 ≤ t ≤ 1.
-#
-# 3) Сегмент DC: від D до C:
-#       x(t) = D_x + (C_x - D_x)*t,
-#       y(t) = D_y + (C_y - D_y)*t,
-#       z(t) = D_z + (C_z - D_z)*t,   де 0 ≤ t ≤ 1.
-#
-# 4) Сегмент CA: від C до A:
-#       x(t) = C_x + (A_x - C_x)*t,
-#       y(t) = C_y + (A_y - C_y)*t,
-#       z(t) = C_z + (A_z - C_z)*t,   де 0 ≤ t ≤ 1.
-# -----------------------------------------------------------------
-print("\nПараметричні рівняння ламаної (контур паралелограма):")
+print("x(t) =")
+sp.pprint(exprs_contour[0])
+print("y(t) =")
+sp.pprint(exprs_contour[1])
+print("z(t) =")
+sp.pprint(exprs_contour[2])
+print("Домен t від", t_vals[0], "до", t_vals[-1])
+print()
+# Створення сітки параметричних значень для u та v
+n_u, n_v = 3000, 3000  # можна змінити кількість кроків для більшої/меншої щільності сітки
+u_vals = np.linspace(0, 1, n_u, endpoint=True)
+v_vals = np.linspace(0, 1, n_v, endpoint=True)
+U, V = np.meshgrid(u_vals, v_vals, indexing='ij')
 
-print("\nСегмент AB (від A до B):")
-print("x(t) = {} + {}*t".format(A[0], B[0] - A[0]))
-print("y(t) = {} + {}*t".format(A[1], B[1] - A[1]))
-print("z(t) = {} + {}*t".format(A[2], B[2] - A[2]))
-print("де 0 ≤ t ≤ 1")
+# Створення числових функцій із символьних рівнянь зони
+f_x_zone = sp.lambdify((u, v), x_zone, "numpy")
+f_y_zone = sp.lambdify((u, v), y_zone, "numpy")
+f_z_zone = sp.lambdify((u, v), z_zone, "numpy")
+# Обчислення координат поверхні для кожної пари (u,v)
+X = f_x_zone(U, V)
+Y = f_y_zone(U, V)
+Z = f_z_zone(U, V)
+# Формуємо масив точок для структурованої сітки PyVista
+grid_points = np.stack((X, Y, Z), axis=-1)  # розмірність (n_u, n_v, 3)
+surface_grid = pv.StructuredGrid()
+surface_grid.points = grid_points.reshape(-1, 3)
+surface_grid.dimensions = [n_u, n_v, 1]  # третя розмірність = 1, оскільки сітка двовимірна
 
-print("\nСегмент BD (від B до D):")
-print("x(t) = {} + {}*t".format(B[0], D[0] - B[0]))
-print("y(t) = {} + {}*t".format(B[1], D[1] - B[1]))
-print("z(t) = {} + {}*t".format(B[2], D[2] - B[2]))
-print("де 0 ≤ t ≤ 1")
+# Перетворення символьних виразів контуру у числові функції
+f_x = sp.lambdify(t, exprs_contour[0], "numpy")
+f_y = sp.lambdify(t, exprs_contour[1], "numpy")
+f_z = sp.lambdify(t, exprs_contour[2], "numpy")
+t_samples = np.linspace(t_vals[0], t_vals[-1], 2000, endpoint=True)
+x_samples = f_x(t_samples)
+y_samples = f_y(t_samples)
+z_samples = f_z(t_samples)
 
-print("\nСегмент DC (від D до C):")
-print("x(t) = {} + {}*t".format(D[0], C[0] - D[0]))
-print("y(t) = {} + {}*t".format(D[1], C[1] - D[1]))
-print("z(t) = {} + {}*t".format(D[2], C[2] - D[2]))
-print("де 0 ≤ t ≤ 1")
+# 3. Візуалізація з PyVista
+plotter = pv.Plotter()
 
-print("\nСегмент CA (від C до A):")
-print("x(t) = {} + {}*t".format(C[0], A[0] - C[0]))
-print("y(t) = {} + {}*t".format(C[1], A[1] - C[1]))
-print("z(t) = {} + {}*t".format(C[2], A[2] - C[2]))
-print("де 0 ≤ t ≤ 1")
+# Додавання ламаної (контур)
+points_line = np.column_stack((x_samples, y_samples, z_samples))
+# Припустимо, що points_line – це масив точок розмірності (N, 3)
+n_points = points_line.shape[0]
+# Створюємо масив з комірками: перший елемент – кількість точок у полі, далі індекси точок.
+cells = np.hstack([[n_points], np.arange(n_points)])
+# Створюємо об'єкт PolyData для лінії
+line = pv.PolyData()
+line.points = points_line
+line.lines = cells
 
-# -----------------------------------------------------------------
-# Побудова 3D-графіка паралелограма та його контуру
-# -----------------------------------------------------------------
-# Створення сітки параметрів u та v для області паралелограма
-n = 50  # Кількість точок для сітки
-u = np.linspace(0, 1, n)
-v = np.linspace(0, 1, n)
-U, V = np.meshgrid(u, v)
+plotter.add_mesh(line, color="black", line_width=3)
 
-# Обчислення координат точок області паралелограма
-X = A[0] + U * (B[0] - A[0]) + V * (C[0] - A[0])
-Y = A[1] + U * (B[1] - A[1]) + V * (C[1] - A[1])
-Z = A[2] + U * (B[2] - A[2]) + V * (C[2] - A[2])
+# Додавання побудованої поверхні (зони) на той же графік
+plotter.add_mesh(surface_grid, color="green", opacity=0.6, show_edges=True, line_width=1)
 
-# Створення 3D-графіка
-fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
+# Додаємо лейбли для вершин
+labels = ["A", "C", "D", "B"]
+plotter.add_point_labels(points, labels, font_size=20, point_color="red", point_size=10)
 
-# Побудова зафарбованої області паралелограма
-ax.plot_surface(X, Y, Z, color='lightblue', alpha=0.5, edgecolor='gray')
+# 1) Можна залишити маленький орієнтаційний віджет у кутку
+plotter.show_axes()  # показує маленький 3D-компас у кутку
 
-# Побудова ламаної (контур паралелограма)
-# Порядок вершин: A -> B -> D -> C -> A
-contour_x = [A[0], B[0], D[0], C[0], A[0]]
-contour_y = [A[1], B[1], D[1], C[1], A[1]]
-contour_z = [A[2], B[2], D[2], C[2], A[2]]
-ax.plot(contour_x, contour_y, contour_z, color='black', linewidth=2)
-
-# Налаштування підписів осей та заголовку графіка
-ax.set_title("Паралелограм та його контур")
-ax.set_xlabel("X")
-ax.set_ylabel("Y")
-ax.set_zlabel("Z")
-ax.view_init(elev=10, azim=-30, roll=0)
-
-plt.show()
+# 2) Додати «bounding box» з поділками
+plotter.show_bounds(
+    grid='front',  # показує сітку «спереду»
+    location='outer',  # розміщує осі по зовнішніх межах
+    # tick_location='inside',  # вмикає мітки (поділки) на осях
+    show_xaxis=True,
+    show_yaxis=True,
+    show_zaxis=True,
+    xtitle='X',
+    ytitle='Y',
+    ztitle='Z'
+)
+# Показуємо сцену
+plotter.show()
 # =====================================================
 # Завдання 3.3.3. Параметричні рівняння області гіперболоїда
 #         z = x^2 - y^2, розташованої над зоною площини XY,
@@ -435,14 +521,13 @@ plt.show()
 
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D  # Для 3D-візуалізації
 import sympy as sp
 
 print("Завдання 3.3.3. Параметричні рівняння області гіперболоїда")
 # ---------------------------
 # 1. Обчислення точок перетину кривих за допомогою sympy
 # ---------------------------
-x = sp.symbols('x')
+
 # Задаємо вирази для кривих:
 y1_expr = 2 * x ** 2 - 7 * x - 3  # крива 1: y = 2x^2 - 7x - 3
 y2_expr = 5 * x ** 2 + 2 * x - 3  # крива 2: y = 5x^2 + 2x - 3
