@@ -166,11 +166,6 @@ def resample_polyline(points, num_points=300):
     return x_interp, y_interp
 
 
-# =====================================================
-# Завдання 3.2.
-# =====================================================
-print("Завдання 3.2. Поверхня перенесення ламаної кривої")
-
 points_polyline = [(-1, 0), (-3, 0), (0, 2), (3, 0), (1, 0), (1, -2), (-1, -2), (-1, 0)]
 
 # Отримуємо символьні вирази для x(u) та y(u)
@@ -577,10 +572,6 @@ plotter.show()
 # де точки їх перетинання обчислено за допомогою Python.
 # =====================================================
 
-import numpy as np
-import matplotlib.pyplot as plt
-import sympy as sp
-
 print("Завдання 3.3.3. Параметричні рівняння області гіперболоїда")
 # ---------------------------
 # 1. Обчислення точок перетину кривих за допомогою sympy
@@ -670,7 +661,7 @@ ax.set_zlabel("z")
 fig.colorbar(surf, shrink=0.5, aspect=5)
 
 plt.show()
-print("Завдання 3.4 Параметричні рівняння поверхні подібних поперечних перерізів")
+
 # =====================================================
 # Завдання 3.4.
 # Побудова поверхні подібних поперечних перерізів.
@@ -679,104 +670,130 @@ print("Завдання 3.4 Параметричні рівняння повер
 # ПРОФІЛЬ: ламана  (0,1), (0.75,0.75), (0.75,0.25),(0,0).
 # =====================================================
 print("Завдання 3.4. Параметричні рівняння поверхні подібних поперечних перерізів")
-# Задаємо список вершин ламаної.
-# Наприклад, остання точка (0,0) закриває ламану.
-vertices = [(0, 1), (0.75, 0.75), (0.75, 0.25), (0, 0), (0, 1)]
+# Задаємо вершини ламаної L (напрямний профіль) в площині XZ.
+# Кожна вершина представлена як (x, z)
+L_vertices = [(0, 1), (1, 0.75), (1, 0.25), (0, 0)]
+L_t_values = list(range(len(L_vertices)))  # Наприклад, [0, 1, 2, ..., 6]
 
-# Отримуємо символьні вирази для x(t) та y(t)
-x_expr, y_expr, t_vals_sym = build_polyline_expr(vertices)
+# Задаємо вершини базового перерізу S (наприклад, квадрат) в площині XY.
+# Щоб отримати замкнуту ламану, повторюємо першу вершину в кінці.
+S_vertices = [(-1, 0), (0, 1), (1, 0), (-1, 0)]
+S_t_values = list(range(len(S_vertices)))  # Наприклад, [0, 1, 2, 3, 4]
 
-# Будуємо параметричне рівняння поверхні обертання навколо осі OX:
-# X(u, v) = x(u), Y(u, v) = y(u)*cos(v), Z(u, v) = y(u)*sin(v)
-X_expr = x_expr
-Y_expr = y_expr * sp.cos(v)
-Z_expr = y_expr * sp.sin(v)
-
-# Виведення символьних рівнянь
-print("Параметричне рівняння ламаної:")
+# ===== Обчислення параметричних рівнянь ламаних =====
+# Для ламаної L (профіль) – координати X та Z
+L_expr, L_params = build_polyline_expr_nd(L_vertices, L_t_values, sym=u)
+xp_expr = L_expr[0]  # x(u)
+zp_expr = L_expr[1]  # z(u)
+print("Параметричні рівняння профілю (ламана L):")
 print("x(u) =")
-sp.pprint(x_expr)
-print("\ny(u) =")
-sp.pprint(y_expr)
+sp.pprint(xp_expr)
+print("\nz(u) =")
+sp.pprint(zp_expr)
+print()
 
-print("\nПараметричне рівняння поверхні обертання (навколо осі OX):")
-print("X(u, v) =")
-sp.pprint(X_expr)
-print("\nY(u, v) =")
-sp.pprint(Y_expr)
-print("\nZ(u, v) =")
-sp.pprint(Z_expr)
+# Для ламаної S (базовий переріз) – координати X та Y
+S_expr, S_params = build_polyline_expr_nd(S_vertices, S_t_values, sym=v)
+xb_expr = S_expr[0]  # xb(v)
+yb_expr = S_expr[1]  # yb(v)
+print("Параметричні рівняння базового перерізу (ламана S):")
+print("xb(v) =")
+sp.pprint(xb_expr)
+print("\nyb(v) =")
+sp.pprint(yb_expr)
+print()
 
-# Створюємо числові функції для візуалізації
-f_x = sp.lambdify(t, x_expr, 'numpy')
-f_y = sp.lambdify(t, y_expr, 'numpy')
-f_X = sp.lambdify((t, v), X_expr, 'numpy')
-f_Y = sp.lambdify((t, v), Y_expr, 'numpy')
-f_Z = sp.lambdify((t, v), Z_expr, 'numpy')
+# Перетворення символьних виразів у числові функції
+f_xp = sp.lambdify(u, xp_expr, 'numpy')
+f_z = sp.lambdify(u, zp_expr, 'numpy')
+f_xb = sp.lambdify(v, xb_expr, 'numpy')
+f_yb = sp.lambdify(v, yb_expr, 'numpy')
 
-# Побудова 2D-графіку ламаної за допомогою Matplotlib
-t_num = np.linspace(t_vals_sym[0], t_vals_sym[-1], 300)
-x_num = f_x(t_num)
-y_num = f_y(t_num)
+# ===== Побудова 2D-графіка ламаної L =====
+u_min, u_max = L_params[0], L_params[-1]
+u_vals = np.linspace(u_min, u_max, 200, endpoint=True)
+L_x_vals = f_xp(u_vals)
+L_z_vals = f_z(u_vals)
 
 plt.figure(figsize=(6, 4))
-plt.plot(x_num, y_num, 'b-', label='Ламана')
-# Позначення вершин червоними точками
-vertices_x = [pt[0] for pt in vertices]
-vertices_y = [pt[1] for pt in vertices]
-plt.scatter(vertices_x, vertices_y, color='red', zorder=5)
-plt.title("Ламана в площині XY")
+plt.plot(L_x_vals, L_z_vals, 'r-', lw=2, label="Ламана L (профіль)")
 plt.xlabel("x")
-plt.ylabel("y")
+plt.ylabel("z")
+plt.title("Графік ламаної L (профіль) в площині XZ")
 plt.legend()
 plt.grid(True)
-plt.axis('equal')
 plt.show()
 
-# Створення сітки параметрів для побудови поверхні
-t_vals = np.linspace(t_vals_sym[0], t_vals_sym[-1], 100)
-v_vals = np.linspace(0, 2 * np.pi, 100)
-T, V = np.meshgrid(t_vals, v_vals)
-X_vals = f_X(T, V)
-Y_vals = f_Y(T, V)
-Z_vals = f_Z(T, V)
+# ===== Побудова 2D-графіка ламаної S =====
+v_min, v_max = S_params[0], S_params[-1]
+v_vals = np.linspace(v_min, v_max, 200, endpoint=True)
+S_x_vals = f_xb(v_vals)
+S_y_vals = f_yb(v_vals)
 
-# Для PyVista створимо StructuredGrid.
-# Зауважте, що np.meshgrid повертає масиви форми (n_v, n_t).
-# Ми встановлюємо dims = (n_t, n_v, 1) і трансформуємо точки у Fortran-порядку.
-nt = len(t_vals)
-nv = len(v_vals)
-points = np.column_stack([
-    X_vals.T.ravel(order='F'),
-    Y_vals.T.ravel(order='F'),
-    Z_vals.T.ravel(order='F')
-])
+plt.figure(figsize=(6, 4))
+plt.plot(S_x_vals, S_y_vals, 'g-', lw=2, label="Ламана S (базовий переріз)")
+plt.xlabel("x")
+plt.ylabel("y")
+plt.title("Графік ламаної S (базовий переріз) в площині XY")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# ===== ДОДАТКОВА 3D-ВІЗУАЛІЗАЦІЯ (pyvista) =====
+# Автоматичний розрахунок масштабного коефіцієнта x0 як максимальне значення x(u) на [u_min, u_max]
+u_sample = np.linspace(u_min, u_max, 10000, endpoint=True)
+x_sample = f_xp(u_sample)
+x0 = x_sample.max()
+print("Автоматично обчислений масштабний коефіцієнт x0 =", x0)
+
+# Побудова параметричних рівнянь для поверхні:
+# x(u,v) = (x(u)/x0) * x_b(v)
+# y(u,v) = (x(u)/x0) * y_b(v)
+# z(u,v) = z(u)
+x_expr = (xp_expr / x0) * xb_expr
+y_expr = (xp_expr / x0) * yb_expr
+z_expr = zp_expr
+
+# Перетворення виразів у числові функції
+f_x = sp.lambdify((u, v), x_expr, 'numpy')
+f_y = sp.lambdify((u, v), y_expr, 'numpy')
+f_z_surface = sp.lambdify(u, z_expr, 'numpy')
+
+# Створення сітки параметрів для поверхні
+num_u, num_v = 1210, 410
+u_vals_3d = np.linspace(u_min, u_max, num_u, endpoint=True)
+v_vals_3d = np.linspace(v_min, v_max, num_v, endpoint=True)
+U, V = np.meshgrid(u_vals_3d, v_vals_3d, indexing='ij')
+
+X = f_x(U, V)
+Y = f_y(U, V)
+Z = f_z_surface(U)
+
+# Формування масиву точок для pyvista
+points = np.empty(X.shape + (3,))
+points[..., 0] = X
+points[..., 1] = Y
+points[..., 2] = Z
+
 grid = pv.StructuredGrid()
-grid.points = points
-grid.dimensions = (nt, nv, 1)
+grid.points = points.reshape(-1, 3)
+grid.dimensions = X.shape[0], X.shape[1], 1
 
-# Генеруюча ламана: значення при v = 0 (тобто Z = 0)
-t_line = np.linspace(t_vals_sym[0], t_vals_sym[-1], 300)
-x_line = f_x(t_line)
-y_line = f_y(t_line)
-z_line = np.zeros_like(t_line)
-curve_points = np.column_stack([x_line, y_line, z_line])
-n_line = len(t_line)
-# Формуємо масив з'єднувальних індексів для ламаної:
-lines = np.hstack(([n_line], np.arange(n_line)))
-polyline = pv.PolyData()
-polyline.points = curve_points
-polyline.lines = lines
+# Побудова кривої L (профіль) в 3D (оскільки L задана в площині XZ, використовуємо y=0)
+L_curve_points = np.column_stack((L_x_vals, np.zeros_like(L_x_vals), L_z_vals))
 
-# Створення першої PyVista-сцени з першим кутом огляду (наприклад, azimuth=45, elevation=30)
-p1 = pv.Plotter(window_size=(800, 600))
-p1.add_mesh(grid, opacity=0.8, cmap='viridis', show_scalar_bar=False)
-p1.add_mesh(polyline, color='red', line_width=5)
-p1.add_text("Поверхня обертання (вигляд 1)", position='upper_edge', font_size=14, shadow=True)
-# Налаштування камери вручну
-p1.camera_position = [(np.max(X_vals), np.max(Y_vals), np.max(Z_vals)),
-                      (np.mean(X_vals), np.mean(Y_vals), np.mean(Z_vals)),
-                      (0, 0, 1)]
-p1.camera.azimuth = 45
-p1.camera.elevation = 30
-p1.show()
+# Визначаємо u0 – точку, в якій x(u) досягає максимального значення (x0)
+u0 = u_sample[np.argmax(x_sample)]
+# Побудова кривої S (базовий переріз) в 3D: беремо S в площині XY та фіксуємо z = z(u0)
+S_curve_x = f_xb(v_vals)
+S_curve_y = f_yb(v_vals)
+S_curve_z = np.full_like(S_curve_x, f_z(u0))
+S_curve_points = np.column_stack((S_curve_x, S_curve_y, S_curve_z))
+
+# Створення plotter-а та додавання поверхні і кривих
+plotter = pv.Plotter()
+plotter.add_mesh(grid, show_edges=True, color="lightblue", opacity=0.7)
+plotter.add_lines(L_curve_points, color="red", width=3, label="Ламана L")
+plotter.add_lines(S_curve_points, color="green", width=3, label="Ламана S")
+plotter.add_legend()
+plotter.show()
